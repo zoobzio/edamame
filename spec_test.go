@@ -3,10 +3,12 @@ package edamame
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/zoobzio/astql/pkg/postgres"
 )
 
 func TestSpec(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -49,7 +51,7 @@ func TestSpec(t *testing.T) {
 }
 
 func TestSpecSchema(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -88,7 +90,7 @@ func TestSpecSchema(t *testing.T) {
 }
 
 func TestSpecJSON(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -110,7 +112,7 @@ func TestSpecJSON(t *testing.T) {
 }
 
 func TestSpecWithCustomCapabilities(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -194,7 +196,7 @@ func TestSpecWithCustomCapabilities(t *testing.T) {
 }
 
 func TestSpecSorting(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -247,7 +249,7 @@ func TestParseConstraints(t *testing.T) {
 }
 
 func TestSpecQueryModifiers(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -306,7 +308,7 @@ func TestSpecQueryModifiers(t *testing.T) {
 }
 
 func TestSpecSelectModifiers(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -352,7 +354,7 @@ func TestSpecSelectModifiers(t *testing.T) {
 }
 
 func TestParamDerivationFromHavingAgg(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -368,18 +370,18 @@ func TestParamDerivationFromHavingAgg(t *testing.T) {
 		},
 	})
 
-	cap, ok := factory.GetQuery("grouped-with-having")
+	c, ok := factory.GetQuery("grouped-with-having")
 	if !ok {
 		t.Fatal("grouped-with-having query not found")
 	}
 
 	// Should have derived 2 params from HavingAgg
-	if len(cap.Params) != 2 {
-		t.Fatalf("Params has %d entries, want 2", len(cap.Params))
+	if len(c.Params) != 2 {
+		t.Fatalf("Params has %d entries, want 2", len(c.Params))
 	}
 
 	paramNames := make(map[string]bool)
-	for _, p := range cap.Params {
+	for _, p := range c.Params {
 		paramNames[p.Name] = true
 	}
 
@@ -393,7 +395,7 @@ func TestParamDerivationFromHavingAgg(t *testing.T) {
 }
 
 func TestParamDerivationFromOrderByExpression(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -407,23 +409,23 @@ func TestParamDerivationFromOrderByExpression(t *testing.T) {
 		},
 	})
 
-	cap, ok := factory.GetQuery("vector-search")
+	c, ok := factory.GetQuery("vector-search")
 	if !ok {
 		t.Fatal("vector-search query not found")
 	}
 
 	// Should have derived 1 param from OrderBy expression
-	if len(cap.Params) != 1 {
-		t.Fatalf("Params has %d entries, want 1", len(cap.Params))
+	if len(c.Params) != 1 {
+		t.Fatalf("Params has %d entries, want 1", len(c.Params))
 	}
 
-	if cap.Params[0].Name != "query_vec" {
-		t.Errorf("Param name = %q, want %q", cap.Params[0].Name, "query_vec")
+	if c.Params[0].Name != "query_vec" {
+		t.Errorf("Param name = %q, want %q", c.Params[0].Name, "query_vec")
 	}
 }
 
 func TestParamDerivationCombined(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -446,18 +448,18 @@ func TestParamDerivationCombined(t *testing.T) {
 		},
 	})
 
-	cap, ok := factory.GetQuery("complex-query")
+	c, ok := factory.GetQuery("complex-query")
 	if !ok {
 		t.Fatal("complex-query query not found")
 	}
 
 	// Should have 4 params: status, min_age, min_count, query_vec
-	if len(cap.Params) != 4 {
-		t.Fatalf("Params has %d entries, want 4", len(cap.Params))
+	if len(c.Params) != 4 {
+		t.Fatalf("Params has %d entries, want 4", len(c.Params))
 	}
 
 	paramNames := make(map[string]bool)
-	for _, p := range cap.Params {
+	for _, p := range c.Params {
 		paramNames[p.Name] = true
 	}
 
@@ -470,7 +472,7 @@ func TestParamDerivationCombined(t *testing.T) {
 }
 
 func TestCerealAccessor(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}

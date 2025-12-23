@@ -27,59 +27,59 @@ func TestAggregateFuncConstants(t *testing.T) {
 func TestCapabilityTypes(t *testing.T) {
 	// Test that capability types can be instantiated with expected fields
 	t.Run("QueryCapability", func(t *testing.T) {
-		cap := QueryCapability{
+		c := QueryCapability{
 			Name:        "test",
 			Description: "test query",
 			Spec:        QuerySpec{},
 			Params:      []ParamSpec{{Name: "id", Required: true}},
 			Tags:        []string{"test"},
 		}
-		if cap.Name != "test" {
-			t.Errorf("Name = %q, want %q", cap.Name, "test")
+		if c.Name != "test" {
+			t.Errorf("Name = %q, want %q", c.Name, "test")
 		}
 	})
 
 	t.Run("SelectCapability", func(t *testing.T) {
-		cap := SelectCapability{
+		c := SelectCapability{
 			Name:        "test",
 			Description: "test select",
 			Spec:        SelectSpec{},
 			Params:      []ParamSpec{{Name: "id", Required: true}},
 			Tags:        []string{"test"},
 		}
-		if cap.Name != "test" {
-			t.Errorf("Name = %q, want %q", cap.Name, "test")
+		if c.Name != "test" {
+			t.Errorf("Name = %q, want %q", c.Name, "test")
 		}
 	})
 
 	t.Run("UpdateCapability", func(t *testing.T) {
-		cap := UpdateCapability{
+		c := UpdateCapability{
 			Name:        "test",
 			Description: "test update",
 			Spec:        UpdateSpec{Set: map[string]string{"name": "new"}},
 			Params:      []ParamSpec{{Name: "id", Required: true}},
 			Tags:        []string{"test"},
 		}
-		if cap.Name != "test" {
-			t.Errorf("Name = %q, want %q", cap.Name, "test")
+		if c.Name != "test" {
+			t.Errorf("Name = %q, want %q", c.Name, "test")
 		}
 	})
 
 	t.Run("DeleteCapability", func(t *testing.T) {
-		cap := DeleteCapability{
+		c := DeleteCapability{
 			Name:        "test",
 			Description: "test delete",
 			Spec:        DeleteSpec{},
 			Params:      []ParamSpec{{Name: "id", Required: true}},
 			Tags:        []string{"test"},
 		}
-		if cap.Name != "test" {
-			t.Errorf("Name = %q, want %q", cap.Name, "test")
+		if c.Name != "test" {
+			t.Errorf("Name = %q, want %q", c.Name, "test")
 		}
 	})
 
 	t.Run("AggregateCapability", func(t *testing.T) {
-		cap := AggregateCapability{
+		c := AggregateCapability{
 			Name:        "test",
 			Description: "test aggregate",
 			Spec:        AggregateSpec{Field: "age"},
@@ -87,11 +87,11 @@ func TestCapabilityTypes(t *testing.T) {
 			Params:      []ParamSpec{},
 			Tags:        []string{"test"},
 		}
-		if cap.Name != "test" {
-			t.Errorf("Name = %q, want %q", cap.Name, "test")
+		if c.Name != "test" {
+			t.Errorf("Name = %q, want %q", c.Name, "test")
 		}
-		if cap.Func != AggSum {
-			t.Errorf("Func = %q, want %q", cap.Func, AggSum)
+		if c.Func != AggSum {
+			t.Errorf("Func = %q, want %q", c.Func, AggSum)
 		}
 	})
 }

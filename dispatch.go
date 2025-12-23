@@ -13,7 +13,7 @@ import (
 // Returns an error if the capability doesn't exist or has an invalid spec.
 func (f *Factory[T]) Query(name string) (*cereal.Query[T], error) {
 	f.mu.RLock()
-	cap, exists := f.queries[name]
+	queryCap, exists := f.queries[name]
 	f.mu.RUnlock()
 
 	if !exists {
@@ -24,7 +24,7 @@ func (f *Factory[T]) Query(name string) (*cereal.Query[T], error) {
 		return nil, fmt.Errorf("query capability %q not found", name)
 	}
 
-	q, err := f.queryFromSpec(cap.Spec)
+	q, err := f.queryFromSpec(queryCap.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("query capability %q: %w", name, err)
 	}
@@ -35,7 +35,7 @@ func (f *Factory[T]) Query(name string) (*cereal.Query[T], error) {
 // Returns an error if the capability doesn't exist or has an invalid spec.
 func (f *Factory[T]) Select(name string) (*cereal.Select[T], error) {
 	f.mu.RLock()
-	cap, exists := f.selects[name]
+	selectCap, exists := f.selects[name]
 	f.mu.RUnlock()
 
 	if !exists {
@@ -46,7 +46,7 @@ func (f *Factory[T]) Select(name string) (*cereal.Select[T], error) {
 		return nil, fmt.Errorf("select capability %q not found", name)
 	}
 
-	s, err := f.selectFromSpec(cap.Spec)
+	s, err := f.selectFromSpec(selectCap.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("select capability %q: %w", name, err)
 	}
@@ -57,7 +57,7 @@ func (f *Factory[T]) Select(name string) (*cereal.Select[T], error) {
 // Returns an error if the capability doesn't exist.
 func (f *Factory[T]) Update(name string) (*cereal.Update[T], error) {
 	f.mu.RLock()
-	cap, exists := f.updates[name]
+	updateCap, exists := f.updates[name]
 	f.mu.RUnlock()
 
 	if !exists {
@@ -68,14 +68,14 @@ func (f *Factory[T]) Update(name string) (*cereal.Update[T], error) {
 		return nil, fmt.Errorf("update capability %q not found", name)
 	}
 
-	return f.modifyFromSpec(cap.Spec), nil
+	return f.modifyFromSpec(updateCap.Spec), nil
 }
 
 // Delete returns a cereal Delete builder for the named capability.
 // Returns an error if the capability doesn't exist.
 func (f *Factory[T]) Delete(name string) (*cereal.Delete[T], error) {
 	f.mu.RLock()
-	cap, exists := f.deletes[name]
+	deleteCap, exists := f.deletes[name]
 	f.mu.RUnlock()
 
 	if !exists {
@@ -86,14 +86,14 @@ func (f *Factory[T]) Delete(name string) (*cereal.Delete[T], error) {
 		return nil, fmt.Errorf("delete capability %q not found", name)
 	}
 
-	return f.removeFromSpec(cap.Spec), nil
+	return f.removeFromSpec(deleteCap.Spec), nil
 }
 
 // Aggregate returns a cereal Aggregate builder for the named capability.
 // Returns an error if the capability doesn't exist.
 func (f *Factory[T]) Aggregate(name string) (*cereal.Aggregate[T], error) {
 	f.mu.RLock()
-	cap, exists := f.aggregates[name]
+	aggCap, exists := f.aggregates[name]
 	f.mu.RUnlock()
 
 	if !exists {
@@ -105,17 +105,17 @@ func (f *Factory[T]) Aggregate(name string) (*cereal.Aggregate[T], error) {
 	}
 
 	// Dispatch to appropriate aggregate function
-	switch cap.Func {
+	switch aggCap.Func {
 	case AggSum:
-		return f.sumFromSpec(cap.Spec), nil
+		return f.sumFromSpec(aggCap.Spec), nil
 	case AggAvg:
-		return f.avgFromSpec(cap.Spec), nil
+		return f.avgFromSpec(aggCap.Spec), nil
 	case AggMin:
-		return f.minFromSpec(cap.Spec), nil
+		return f.minFromSpec(aggCap.Spec), nil
 	case AggMax:
-		return f.maxFromSpec(cap.Spec), nil
+		return f.maxFromSpec(aggCap.Spec), nil
 	default:
-		return f.countFromSpec(cap.Spec), nil
+		return f.countFromSpec(aggCap.Spec), nil
 	}
 }
 
@@ -124,6 +124,14 @@ func (f *Factory[T]) Aggregate(name string) (*cereal.Aggregate[T], error) {
 // are driven by struct fields rather than specs.
 func (f *Factory[T]) Insert() *cereal.Create[T] {
 	return f.cereal.Insert()
+}
+
+// Compound returns a cereal Compound builder from a CompoundQuerySpec.
+// Compound queries combine multiple queries using set operations (UNION, INTERSECT, EXCEPT).
+// Unlike other operations, compound queries are not registered as capabilities - they are
+// constructed directly from a spec since they represent ad-hoc combinations.
+func (f *Factory[T]) Compound(spec CompoundQuerySpec) (*cereal.Compound[T], error) {
+	return f.compoundFromSpec(spec)
 }
 
 // ExecQuery executes a named query capability directly.
@@ -241,6 +249,25 @@ func (f *Factory[T]) ExecInsertBatch(ctx context.Context, records []*T) (int64, 
 // ExecInsertBatchTx inserts multiple records within a transaction.
 func (f *Factory[T]) ExecInsertBatchTx(ctx context.Context, tx *sqlx.Tx, records []*T) (int64, error) {
 	return f.Insert().ExecBatchTx(ctx, tx, records)
+}
+
+// ExecCompound executes a compound query directly.
+// Convenience method that combines Compound() and Exec().
+func (f *Factory[T]) ExecCompound(ctx context.Context, spec CompoundQuerySpec, params map[string]any) ([]*T, error) {
+	c, err := f.Compound(spec)
+	if err != nil {
+		return nil, err
+	}
+	return c.Exec(ctx, params)
+}
+
+// ExecCompoundTx executes a compound query within a transaction.
+func (f *Factory[T]) ExecCompoundTx(ctx context.Context, tx *sqlx.Tx, spec CompoundQuerySpec, params map[string]any) ([]*T, error) {
+	c, err := f.Compound(spec)
+	if err != nil {
+		return nil, err
+	}
+	return c.ExecTx(ctx, tx, params)
 }
 
 // ExecUpdateBatch executes a named update capability with multiple parameter sets.

@@ -22,6 +22,18 @@ import (
 //
 //	{"field": "email", "is_null": true}
 //
+// BETWEEN condition:
+//
+//	{"field": "age", "between": true, "low_param": "min_age", "high_param": "max_age"}
+//
+// NOT BETWEEN condition:
+//
+//	{"field": "age", "not_between": true, "low_param": "min_age", "high_param": "max_age"}
+//
+// Field-to-field comparison:
+//
+//	{"field": "created_at", "operator": "<", "right_field": "updated_at"}
+//
 // Condition group (AND/OR):
 //
 //	{
@@ -38,6 +50,15 @@ type ConditionSpec struct {
 	Param    string `json:"param,omitempty"`
 	IsNull   bool   `json:"is_null,omitempty"`
 
+	// BETWEEN condition fields
+	Between    bool   `json:"between,omitempty"`
+	NotBetween bool   `json:"not_between,omitempty"`
+	LowParam   string `json:"low_param,omitempty"`
+	HighParam  string `json:"high_param,omitempty"`
+
+	// Field-to-field comparison
+	RightField string `json:"right_field,omitempty"`
+
 	// Condition group fields (for AND/OR grouping)
 	Logic string          `json:"logic,omitempty"` // "AND" or "OR"
 	Group []ConditionSpec `json:"group,omitempty"` // Nested conditions
@@ -46,6 +67,21 @@ type ConditionSpec struct {
 // IsGroup returns true if this ConditionSpec represents a condition group.
 func (c ConditionSpec) IsGroup() bool {
 	return c.Logic != "" && len(c.Group) > 0
+}
+
+// IsBetween returns true if this ConditionSpec represents a BETWEEN condition.
+func (c ConditionSpec) IsBetween() bool {
+	return c.Between && c.LowParam != "" && c.HighParam != ""
+}
+
+// IsNotBetween returns true if this ConditionSpec represents a NOT BETWEEN condition.
+func (c ConditionSpec) IsNotBetween() bool {
+	return c.NotBetween && c.LowParam != "" && c.HighParam != ""
+}
+
+// IsFieldComparison returns true if this ConditionSpec compares two fields.
+func (c ConditionSpec) IsFieldComparison() bool {
+	return c.RightField != "" && c.Operator != ""
 }
 
 // OrderBySpec represents an ORDER BY clause in a serializable format.
@@ -96,6 +132,69 @@ type HavingAggSpec struct {
 	Param    string `json:"param"`           // Parameter name for comparison value
 }
 
+// SelectExprSpec represents a computed expression in the SELECT clause.
+// This enables selecting derived values like UPPER(name), COUNT(*), or COALESCE(field, default).
+//
+// String functions:
+//
+//	{"func": "upper", "field": "name", "alias": "upper_name"}
+//	{"func": "lower", "field": "email", "alias": "lower_email"}
+//	{"func": "length", "field": "name", "alias": "name_len"}
+//	{"func": "trim", "field": "name", "alias": "trimmed"}
+//	{"func": "ltrim", "field": "name", "alias": "ltrimmed"}
+//	{"func": "rtrim", "field": "name", "alias": "rtrimmed"}
+//	{"func": "substring", "field": "name", "params": ["start", "length"], "alias": "sub"}
+//	{"func": "replace", "field": "name", "params": ["search", "replacement"], "alias": "replaced"}
+//	{"func": "concat", "fields": ["first_name", "last_name"], "alias": "full_name"}
+//
+// Math functions:
+//
+//	{"func": "abs", "field": "amount", "alias": "abs_amount"}
+//	{"func": "ceil", "field": "price", "alias": "ceil_price"}
+//	{"func": "floor", "field": "price", "alias": "floor_price"}
+//	{"func": "round", "field": "price", "alias": "rounded"}
+//	{"func": "sqrt", "field": "value", "alias": "sqrt_value"}
+//	{"func": "power", "field": "base", "params": ["exponent"], "alias": "result"}
+//
+// Date/Time functions:
+//
+//	{"func": "now", "alias": "current_ts"}
+//	{"func": "current_date", "alias": "today"}
+//	{"func": "current_time", "alias": "now_time"}
+//	{"func": "current_timestamp", "alias": "ts"}
+//
+// Type casting:
+//
+//	{"func": "cast", "field": "id", "cast_type": "text", "alias": "id_str"}
+//
+// Aggregate functions (inline in SELECT):
+//
+//	{"func": "count_star", "alias": "total"}
+//	{"func": "count", "field": "id", "alias": "id_count"}
+//	{"func": "count_distinct", "field": "status", "alias": "unique_statuses"}
+//	{"func": "sum", "field": "amount", "alias": "total_amount"}
+//	{"func": "avg", "field": "price", "alias": "avg_price"}
+//	{"func": "min", "field": "created_at", "alias": "first_created"}
+//	{"func": "max", "field": "updated_at", "alias": "last_updated"}
+//
+// Aggregate with filter:
+//
+//	{"func": "sum", "field": "amount", "filter": {"field": "status", "operator": "=", "param": "paid"}, "alias": "paid_total"}
+//
+// Conditional functions:
+//
+//	{"func": "coalesce", "params": ["nullable_field", "default_value"], "alias": "result"}
+//	{"func": "nullif", "params": ["field1", "field2"], "alias": "result"}
+type SelectExprSpec struct {
+	Func     string         `json:"func"`                // Function name (see examples above)
+	Field    string         `json:"field,omitempty"`     // Primary field for single-field functions
+	Fields   []string       `json:"fields,omitempty"`    // Multiple fields (for concat)
+	Params   []string       `json:"params,omitempty"`    // Additional parameters
+	CastType string         `json:"cast_type,omitempty"` // Target type for cast (text, int, float, etc.)
+	Filter   *ConditionSpec `json:"filter,omitempty"`    // Filter condition for filtered aggregates
+	Alias    string         `json:"alias"`               // Required: column alias for the expression
+}
+
 // QuerySpec represents a SELECT query that returns multiple records in a serializable format.
 // This can be unmarshaled from JSON to build complex queries programmatically.
 //
@@ -116,18 +215,28 @@ type HavingAggSpec struct {
 //	  "distinct_on": ["user_id"],
 //	  "for_locking": "update"
 //	}
+//
+// For parameterized pagination (useful for API endpoints):
+//
+//	{
+//	  "limit_param": "page_size",
+//	  "offset_param": "page_offset"
+//	}
 type QuerySpec struct {
-	Fields     []string        `json:"fields,omitempty"`
-	Where      []ConditionSpec `json:"where,omitempty"`
-	OrderBy    []OrderBySpec   `json:"order_by,omitempty"`
-	GroupBy    []string        `json:"group_by,omitempty"`
-	Having     []ConditionSpec `json:"having,omitempty"`
-	HavingAgg  []HavingAggSpec `json:"having_agg,omitempty"`
-	Limit      *int            `json:"limit,omitempty"`
-	Offset     *int            `json:"offset,omitempty"`
-	Distinct   bool            `json:"distinct,omitempty"`
-	DistinctOn []string        `json:"distinct_on,omitempty"` // PostgreSQL DISTINCT ON fields
-	ForLocking string          `json:"for_locking,omitempty"` // "update", "no_key_update", "share", "key_share"
+	Fields      []string         `json:"fields,omitempty"`
+	SelectExprs []SelectExprSpec `json:"select_exprs,omitempty"` // Computed expressions (UPPER, COUNT, etc.)
+	Where       []ConditionSpec  `json:"where,omitempty"`
+	OrderBy     []OrderBySpec    `json:"order_by,omitempty"`
+	GroupBy     []string         `json:"group_by,omitempty"`
+	Having      []ConditionSpec  `json:"having,omitempty"`
+	HavingAgg   []HavingAggSpec  `json:"having_agg,omitempty"`
+	Limit       *int             `json:"limit,omitempty"`
+	LimitParam  string           `json:"limit_param,omitempty"` // Parameterized limit (mutually exclusive with Limit)
+	Offset      *int             `json:"offset,omitempty"`
+	OffsetParam string           `json:"offset_param,omitempty"` // Parameterized offset (mutually exclusive with Offset)
+	Distinct    bool             `json:"distinct,omitempty"`
+	DistinctOn  []string         `json:"distinct_on,omitempty"` // PostgreSQL DISTINCT ON fields
+	ForLocking  string           `json:"for_locking,omitempty"` // "update", "no_key_update", "share", "key_share"
 }
 
 // SelectSpec represents a SELECT query that returns a single record in a serializable format.
@@ -149,17 +258,20 @@ type QuerySpec struct {
 //	  "for_locking": "update"
 //	}
 type SelectSpec struct {
-	Fields     []string        `json:"fields,omitempty"`
-	Where      []ConditionSpec `json:"where,omitempty"`
-	OrderBy    []OrderBySpec   `json:"order_by,omitempty"`
-	GroupBy    []string        `json:"group_by,omitempty"`
-	Having     []ConditionSpec `json:"having,omitempty"`
-	HavingAgg  []HavingAggSpec `json:"having_agg,omitempty"`
-	Limit      *int            `json:"limit,omitempty"`
-	Offset     *int            `json:"offset,omitempty"`
-	Distinct   bool            `json:"distinct,omitempty"`
-	DistinctOn []string        `json:"distinct_on,omitempty"` // PostgreSQL DISTINCT ON fields
-	ForLocking string          `json:"for_locking,omitempty"` // "update", "no_key_update", "share", "key_share"
+	Fields      []string         `json:"fields,omitempty"`
+	SelectExprs []SelectExprSpec `json:"select_exprs,omitempty"` // Computed expressions (UPPER, COUNT, etc.)
+	Where       []ConditionSpec  `json:"where,omitempty"`
+	OrderBy     []OrderBySpec    `json:"order_by,omitempty"`
+	GroupBy     []string         `json:"group_by,omitempty"`
+	Having      []ConditionSpec  `json:"having,omitempty"`
+	HavingAgg   []HavingAggSpec  `json:"having_agg,omitempty"`
+	Limit       *int             `json:"limit,omitempty"`
+	LimitParam  string           `json:"limit_param,omitempty"` // Parameterized limit (mutually exclusive with Limit)
+	Offset      *int             `json:"offset,omitempty"`
+	OffsetParam string           `json:"offset_param,omitempty"` // Parameterized offset (mutually exclusive with Offset)
+	Distinct    bool             `json:"distinct,omitempty"`
+	DistinctOn  []string         `json:"distinct_on,omitempty"` // PostgreSQL DISTINCT ON fields
+	ForLocking  string           `json:"for_locking,omitempty"` // "update", "no_key_update", "share", "key_share"
 }
 
 // UpdateSpec represents an UPDATE query in a serializable format.
@@ -288,12 +400,12 @@ type CompoundQuerySpec struct {
 // FactorySpec provides a complete description of a factory's capabilities
 // for introspection, documentation, and LLM tool definitions.
 type FactorySpec struct {
-	Table      string               `json:"table"`
-	Schema     SchemaSpec           `json:"schema"`
-	Queries    []QueryCapabilitySpec    `json:"queries"`
-	Selects    []SelectCapabilitySpec   `json:"selects"`
-	Updates    []UpdateCapabilitySpec   `json:"updates"`
-	Deletes    []DeleteCapabilitySpec   `json:"deletes"`
+	Table      string                    `json:"table"`
+	Schema     SchemaSpec                `json:"schema"`
+	Queries    []QueryCapabilitySpec     `json:"queries"`
+	Selects    []SelectCapabilitySpec    `json:"selects"`
+	Updates    []UpdateCapabilitySpec    `json:"updates"`
+	Deletes    []DeleteCapabilitySpec    `json:"deletes"`
 	Aggregates []AggregateCapabilitySpec `json:"aggregates"`
 }
 
@@ -382,74 +494,79 @@ func (f *Factory[T]) Spec() FactorySpec {
 		Aggregates: make([]AggregateCapabilitySpec, 0, len(f.aggregates)),
 	}
 
-	for _, cap := range f.queries {
+	for name := range f.queries {
+		c := f.queries[name]
 		spec.Queries = append(spec.Queries, QueryCapabilitySpec{
-			Name:        cap.Name,
-			Description: cap.Description,
-			Params:      cap.Params,
-			Tags:        cap.Tags,
-			Limit:       cap.Spec.Limit,
-			Offset:      cap.Spec.Offset,
-			Distinct:    cap.Spec.Distinct,
-			DistinctOn:  cap.Spec.DistinctOn,
-			GroupBy:     cap.Spec.GroupBy,
-			ForLocking:  cap.Spec.ForLocking,
+			Name:        c.Name,
+			Description: c.Description,
+			Params:      c.Params,
+			Tags:        c.Tags,
+			Limit:       c.Spec.Limit,
+			Offset:      c.Spec.Offset,
+			Distinct:    c.Spec.Distinct,
+			DistinctOn:  c.Spec.DistinctOn,
+			GroupBy:     c.Spec.GroupBy,
+			ForLocking:  c.Spec.ForLocking,
 		})
 	}
 	sort.Slice(spec.Queries, func(i, j int) bool {
 		return spec.Queries[i].Name < spec.Queries[j].Name
 	})
 
-	for _, cap := range f.selects {
+	for name := range f.selects {
+		c := f.selects[name]
 		spec.Selects = append(spec.Selects, SelectCapabilitySpec{
-			Name:        cap.Name,
-			Description: cap.Description,
-			Params:      cap.Params,
-			Tags:        cap.Tags,
-			Limit:       cap.Spec.Limit,
-			Offset:      cap.Spec.Offset,
-			Distinct:    cap.Spec.Distinct,
-			DistinctOn:  cap.Spec.DistinctOn,
-			GroupBy:     cap.Spec.GroupBy,
-			ForLocking:  cap.Spec.ForLocking,
+			Name:        c.Name,
+			Description: c.Description,
+			Params:      c.Params,
+			Tags:        c.Tags,
+			Limit:       c.Spec.Limit,
+			Offset:      c.Spec.Offset,
+			Distinct:    c.Spec.Distinct,
+			DistinctOn:  c.Spec.DistinctOn,
+			GroupBy:     c.Spec.GroupBy,
+			ForLocking:  c.Spec.ForLocking,
 		})
 	}
 	sort.Slice(spec.Selects, func(i, j int) bool {
 		return spec.Selects[i].Name < spec.Selects[j].Name
 	})
 
-	for _, cap := range f.updates {
+	for name := range f.updates {
+		c := f.updates[name]
 		spec.Updates = append(spec.Updates, UpdateCapabilitySpec{
-			Name:        cap.Name,
-			Description: cap.Description,
-			Params:      cap.Params,
-			Tags:        cap.Tags,
+			Name:        c.Name,
+			Description: c.Description,
+			Params:      c.Params,
+			Tags:        c.Tags,
 		})
 	}
 	sort.Slice(spec.Updates, func(i, j int) bool {
 		return spec.Updates[i].Name < spec.Updates[j].Name
 	})
 
-	for _, cap := range f.deletes {
+	for name := range f.deletes {
+		c := f.deletes[name]
 		spec.Deletes = append(spec.Deletes, DeleteCapabilitySpec{
-			Name:        cap.Name,
-			Description: cap.Description,
-			Params:      cap.Params,
-			Tags:        cap.Tags,
+			Name:        c.Name,
+			Description: c.Description,
+			Params:      c.Params,
+			Tags:        c.Tags,
 		})
 	}
 	sort.Slice(spec.Deletes, func(i, j int) bool {
 		return spec.Deletes[i].Name < spec.Deletes[j].Name
 	})
 
-	for _, cap := range f.aggregates {
+	for name := range f.aggregates {
+		c := f.aggregates[name]
 		spec.Aggregates = append(spec.Aggregates, AggregateCapabilitySpec{
-			Name:        cap.Name,
-			Description: cap.Description,
-			Func:        cap.Func,
-			Field:       cap.Spec.Field,
-			Params:      cap.Params,
-			Tags:        cap.Tags,
+			Name:        c.Name,
+			Description: c.Description,
+			Func:        c.Func,
+			Field:       c.Spec.Field,
+			Params:      c.Params,
+			Tags:        c.Tags,
 		})
 	}
 	sort.Slice(spec.Aggregates, func(i, j int) bool {

@@ -3,6 +3,8 @@ package edamame
 import (
 	"strings"
 	"testing"
+
+	"github.com/zoobzio/astql/pkg/postgres"
 )
 
 func TestToCondition(t *testing.T) {
@@ -55,7 +57,7 @@ func TestToConditions(t *testing.T) {
 }
 
 func TestQueryFromSpec(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -101,7 +103,7 @@ func TestQueryFromSpec(t *testing.T) {
 }
 
 func TestQueryFromSpecWithOrderByVariants(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -150,7 +152,7 @@ func TestQueryFromSpecWithOrderByVariants(t *testing.T) {
 }
 
 func TestQueryFromSpecWithConditionGroups(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -183,7 +185,7 @@ func TestQueryFromSpecWithConditionGroups(t *testing.T) {
 }
 
 func TestSelectFromSpec(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -213,7 +215,7 @@ func TestSelectFromSpec(t *testing.T) {
 }
 
 func TestModifyFromSpec(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -243,7 +245,7 @@ func TestModifyFromSpec(t *testing.T) {
 }
 
 func TestRemoveFromSpec(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -272,7 +274,7 @@ func TestRemoveFromSpec(t *testing.T) {
 }
 
 func TestAggregateFromSpec(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -339,7 +341,7 @@ func TestAggregateFromSpec(t *testing.T) {
 }
 
 func TestInsertFromSpec(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -392,7 +394,7 @@ func TestInsertFromSpec(t *testing.T) {
 }
 
 func TestApplyForLocking(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -440,7 +442,7 @@ func TestApplyForLocking(t *testing.T) {
 }
 
 func TestNullConditions(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -476,6 +478,255 @@ func TestNullConditions(t *testing.T) {
 
 			if !strings.Contains(strings.ToUpper(result.SQL), tt.contains) {
 				t.Errorf("SQL should contain %q: %s", tt.contains, result.SQL)
+			}
+		})
+	}
+}
+
+func TestBetweenConditions(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		spec     QuerySpec
+		contains string
+	}{
+		{
+			name: "between",
+			spec: QuerySpec{
+				Where: []ConditionSpec{
+					{Field: "age", Between: true, LowParam: "min_age", HighParam: "max_age"},
+				},
+			},
+			contains: "BETWEEN",
+		},
+		{
+			name: "not between",
+			spec: QuerySpec{
+				Where: []ConditionSpec{
+					{Field: "age", NotBetween: true, LowParam: "min_age", HighParam: "max_age"},
+				},
+			},
+			contains: "NOT BETWEEN",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder, err := factory.queryFromSpec(tt.spec)
+			if err != nil {
+				t.Fatalf("queryFromSpec() failed: %v", err)
+			}
+			result, err := builder.Render()
+			if err != nil {
+				t.Fatalf("Render() failed: %v", err)
+			}
+			if !strings.Contains(strings.ToUpper(result.SQL), tt.contains) {
+				t.Errorf("SQL should contain %q: %s", tt.contains, result.SQL)
+			}
+		})
+	}
+}
+
+func TestFieldToFieldComparison(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	spec := QuerySpec{
+		Where: []ConditionSpec{
+			{Field: "id", Operator: "<", RightField: "age"},
+		},
+	}
+
+	builder, err := factory.queryFromSpec(spec)
+	if err != nil {
+		t.Fatalf("queryFromSpec() failed: %v", err)
+	}
+	result, err := builder.Render()
+	if err != nil {
+		t.Fatalf("Render() failed: %v", err)
+	}
+
+	// Should compare two fields, not a field and param
+	sql := result.SQL
+	if !strings.Contains(sql, `"id"`) || !strings.Contains(sql, `"age"`) {
+		t.Errorf("SQL should compare two fields: %s", sql)
+	}
+}
+
+func TestParameterizedPagination(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		spec     QuerySpec
+		contains string
+	}{
+		{
+			name: "limit param",
+			spec: QuerySpec{
+				LimitParam: "page_size",
+			},
+			contains: ":page_size",
+		},
+		{
+			name: "offset param",
+			spec: QuerySpec{
+				OffsetParam: "page_offset",
+			},
+			contains: ":page_offset",
+		},
+		{
+			name: "both params",
+			spec: QuerySpec{
+				LimitParam:  "page_size",
+				OffsetParam: "page_offset",
+			},
+			contains: ":page_size",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder, err := factory.queryFromSpec(tt.spec)
+			if err != nil {
+				t.Fatalf("queryFromSpec() failed: %v", err)
+			}
+			result, err := builder.Render()
+			if err != nil {
+				t.Fatalf("Render() failed: %v", err)
+			}
+			if !strings.Contains(result.SQL, tt.contains) {
+				t.Errorf("SQL should contain %q: %s", tt.contains, result.SQL)
+			}
+		})
+	}
+}
+
+func TestSelectExpressions(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		expr     SelectExprSpec
+		contains string
+	}{
+		{
+			name:     "upper",
+			expr:     SelectExprSpec{Func: "upper", Field: "name", Alias: "upper_name"},
+			contains: "UPPER",
+		},
+		{
+			name:     "lower",
+			expr:     SelectExprSpec{Func: "lower", Field: "email", Alias: "lower_email"},
+			contains: "LOWER",
+		},
+		{
+			name:     "length",
+			expr:     SelectExprSpec{Func: "length", Field: "name", Alias: "name_len"},
+			contains: "LENGTH",
+		},
+		{
+			name:     "count_star",
+			expr:     SelectExprSpec{Func: "count_star", Alias: "total"},
+			contains: "COUNT(*)",
+		},
+		{
+			name:     "sum",
+			expr:     SelectExprSpec{Func: "sum", Field: "age", Alias: "total_age"},
+			contains: "SUM",
+		},
+		{
+			name:     "coalesce",
+			expr:     SelectExprSpec{Func: "coalesce", Params: []string{"name", "default_name"}, Alias: "result"},
+			contains: "COALESCE",
+		},
+		{
+			name:     "now",
+			expr:     SelectExprSpec{Func: "now", Alias: "current_ts"},
+			contains: "NOW",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := QuerySpec{
+				SelectExprs: []SelectExprSpec{tt.expr},
+			}
+			builder, err := factory.queryFromSpec(spec)
+			if err != nil {
+				t.Fatalf("queryFromSpec() failed: %v", err)
+			}
+			result, err := builder.Render()
+			if err != nil {
+				t.Fatalf("Render() failed: %v", err)
+			}
+			if !strings.Contains(strings.ToUpper(result.SQL), tt.contains) {
+				t.Errorf("SQL should contain %q: %s", tt.contains, result.SQL)
+			}
+		})
+	}
+}
+
+func TestConditionSpecHelpers(t *testing.T) {
+	tests := []struct {
+		name           string
+		spec           ConditionSpec
+		isBetween      bool
+		isNotBetween   bool
+		isFieldCompare bool
+		isGroup        bool
+	}{
+		{
+			name:      "between",
+			spec:      ConditionSpec{Field: "age", Between: true, LowParam: "min", HighParam: "max"},
+			isBetween: true,
+		},
+		{
+			name:         "not between",
+			spec:         ConditionSpec{Field: "age", NotBetween: true, LowParam: "min", HighParam: "max"},
+			isNotBetween: true,
+		},
+		{
+			name:           "field comparison",
+			spec:           ConditionSpec{Field: "created_at", Operator: "<", RightField: "updated_at"},
+			isFieldCompare: true,
+		},
+		{
+			name:    "group",
+			spec:    ConditionSpec{Logic: "OR", Group: []ConditionSpec{{Field: "x", Operator: "=", Param: "y"}}},
+			isGroup: true,
+		},
+		{
+			name: "simple condition",
+			spec: ConditionSpec{Field: "age", Operator: "=", Param: "val"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.spec.IsBetween(); got != tt.isBetween {
+				t.Errorf("IsBetween() = %v, want %v", got, tt.isBetween)
+			}
+			if got := tt.spec.IsNotBetween(); got != tt.isNotBetween {
+				t.Errorf("IsNotBetween() = %v, want %v", got, tt.isNotBetween)
+			}
+			if got := tt.spec.IsFieldComparison(); got != tt.isFieldCompare {
+				t.Errorf("IsFieldComparison() = %v, want %v", got, tt.isFieldCompare)
+			}
+			if got := tt.spec.IsGroup(); got != tt.isGroup {
+				t.Errorf("IsGroup() = %v, want %v", got, tt.isGroup)
 			}
 		})
 	}

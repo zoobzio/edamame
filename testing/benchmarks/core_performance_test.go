@@ -3,6 +3,7 @@ package benchmarks
 import (
 	"testing"
 
+	"github.com/zoobzio/astql/pkg/postgres"
 	"github.com/zoobzio/edamame"
 )
 
@@ -19,7 +20,7 @@ func BenchmarkFactoryCreation(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := edamame.New[User](nil, "users")
+		_, err := edamame.New[User](nil, "users", postgres.New())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -28,7 +29,7 @@ func BenchmarkFactoryCreation(b *testing.B) {
 
 // BenchmarkQueryBuilding measures query builder creation from capability.
 func BenchmarkQueryBuilding(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -47,7 +48,7 @@ func BenchmarkQueryBuilding(b *testing.B) {
 
 // BenchmarkSelectBuilding measures select builder creation from capability.
 func BenchmarkSelectBuilding(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -66,7 +67,7 @@ func BenchmarkSelectBuilding(b *testing.B) {
 
 // BenchmarkQueryRender measures SQL rendering from query capability.
 func BenchmarkQueryRender(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -85,7 +86,7 @@ func BenchmarkQueryRender(b *testing.B) {
 
 // BenchmarkSelectRender measures SQL rendering from select capability.
 func BenchmarkSelectRender(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -104,12 +105,12 @@ func BenchmarkSelectRender(b *testing.B) {
 
 // BenchmarkAddQuery measures custom query capability registration.
 func BenchmarkAddQuery(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	cap := edamame.QueryCapability{
+	c := edamame.QueryCapability{
 		Name:        "custom",
 		Description: "Custom query",
 		Spec: edamame.QuerySpec{
@@ -123,13 +124,13 @@ func BenchmarkAddQuery(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		factory.AddQuery(cap)
+		factory.AddQuery(c)
 	}
 }
 
 // BenchmarkCapabilityLookup measures capability lookup performance.
 func BenchmarkCapabilityLookup(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -172,7 +173,7 @@ func BenchmarkCapabilityLookup(b *testing.B) {
 
 // BenchmarkListCapabilities measures capability list performance.
 func BenchmarkListCapabilities(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -194,7 +195,7 @@ func BenchmarkListCapabilities(b *testing.B) {
 
 // BenchmarkSpec measures spec generation performance.
 func BenchmarkSpec(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -215,7 +216,7 @@ func BenchmarkSpec(b *testing.B) {
 
 // BenchmarkSpecJSON measures JSON spec generation performance.
 func BenchmarkSpecJSON(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -238,7 +239,7 @@ func BenchmarkSpecJSON(b *testing.B) {
 
 // BenchmarkComplexQuery measures building a complex query with multiple conditions.
 func BenchmarkComplexQuery(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -287,7 +288,7 @@ func BenchmarkComplexQuery(b *testing.B) {
 
 // BenchmarkConditionGroups measures handling of nested condition groups.
 func BenchmarkConditionGroups(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -333,7 +334,7 @@ func BenchmarkConditionGroups(b *testing.B) {
 
 // BenchmarkConcurrentAccess measures concurrent capability access.
 func BenchmarkConcurrentAccess(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -352,7 +353,7 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 
 // BenchmarkConcurrentAddRemove measures concurrent add/remove operations.
 func BenchmarkConcurrentAddRemove(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -373,7 +374,7 @@ func BenchmarkConcurrentAddRemove(b *testing.B) {
 
 // BenchmarkAggregateCapabilities measures aggregate capability performance.
 func BenchmarkAggregateCapabilities(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users")
+	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -3,6 +3,8 @@ package edamame
 import (
 	"strings"
 	"testing"
+
+	"github.com/zoobzio/astql/pkg/postgres"
 )
 
 // User is a test model.
@@ -15,7 +17,7 @@ type User struct {
 
 func TestNew(t *testing.T) {
 	// nil db is allowed for query building without execution
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -30,14 +32,14 @@ func TestNew(t *testing.T) {
 }
 
 func TestNew_EmptyTableName(t *testing.T) {
-	_, err := New[User](nil, "")
+	_, err := New[User](nil, "", postgres.New())
 	if err == nil {
 		t.Error("New() with empty table name should fail")
 	}
 }
 
 func TestDefaultCRUDCapabilities(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -68,68 +70,68 @@ func TestDefaultCRUDCapabilities(t *testing.T) {
 }
 
 func TestSelectCapability(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	cap, ok := factory.GetSelect("select")
+	c, ok := factory.GetSelect("select")
 	if !ok {
 		t.Fatal("GetSelect('select') returned false")
 	}
 
-	if cap.Name != "select" {
-		t.Errorf("Name = %q, want %q", cap.Name, "select")
+	if c.Name != "select" {
+		t.Errorf("Name = %q, want %q", c.Name, "select")
 	}
 
-	if len(cap.Spec.Where) != 1 {
-		t.Fatalf("Spec.Where has %d conditions, want 1", len(cap.Spec.Where))
+	if len(c.Spec.Where) != 1 {
+		t.Fatalf("Spec.Where has %d conditions, want 1", len(c.Spec.Where))
 	}
 
-	if cap.Spec.Where[0].Field != "id" {
-		t.Errorf("Where[0].Field = %q, want %q", cap.Spec.Where[0].Field, "id")
+	if c.Spec.Where[0].Field != "id" {
+		t.Errorf("Where[0].Field = %q, want %q", c.Spec.Where[0].Field, "id")
 	}
 
-	if len(cap.Params) != 1 {
-		t.Fatalf("Params has %d entries, want 1", len(cap.Params))
+	if len(c.Params) != 1 {
+		t.Fatalf("Params has %d entries, want 1", len(c.Params))
 	}
 
-	if cap.Params[0].Name != "id" {
-		t.Errorf("Params[0].Name = %q, want %q", cap.Params[0].Name, "id")
+	if c.Params[0].Name != "id" {
+		t.Errorf("Params[0].Name = %q, want %q", c.Params[0].Name, "id")
 	}
 
-	if !cap.Params[0].Required {
+	if !c.Params[0].Required {
 		t.Error("Params[0].Required = false, want true")
 	}
 }
 
 func TestQueryCapability(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	cap, ok := factory.GetQuery("query")
+	c, ok := factory.GetQuery("query")
 	if !ok {
 		t.Fatal("GetQuery('query') returned false")
 	}
 
-	if cap.Name != "query" {
-		t.Errorf("Name = %q, want %q", cap.Name, "query")
+	if c.Name != "query" {
+		t.Errorf("Name = %q, want %q", c.Name, "query")
 	}
 
 	// Default query has no conditions
-	if len(cap.Spec.Where) != 0 {
-		t.Errorf("Spec.Where has %d conditions, want 0", len(cap.Spec.Where))
+	if len(c.Spec.Where) != 0 {
+		t.Errorf("Spec.Where has %d conditions, want 0", len(c.Spec.Where))
 	}
 
-	if len(cap.Params) != 0 {
-		t.Errorf("Params has %d entries, want 0", len(cap.Params))
+	if len(c.Params) != 0 {
+		t.Errorf("Params has %d entries, want 0", len(c.Params))
 	}
 }
 
 func TestAddQuery(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -148,27 +150,27 @@ func TestAddQuery(t *testing.T) {
 		t.Error("HasQuery('active-users') = false after AddQuery")
 	}
 
-	cap, ok := factory.GetQuery("active-users")
+	c, ok := factory.GetQuery("active-users")
 	if !ok {
 		t.Fatal("GetQuery('active-users') returned false")
 	}
 
-	if cap.Description != "Find active users" {
-		t.Errorf("Description = %q, want %q", cap.Description, "Find active users")
+	if c.Description != "Find active users" {
+		t.Errorf("Description = %q, want %q", c.Description, "Find active users")
 	}
 
 	// Params should be auto-derived
-	if len(cap.Params) != 1 {
-		t.Fatalf("Params has %d entries, want 1", len(cap.Params))
+	if len(c.Params) != 1 {
+		t.Fatalf("Params has %d entries, want 1", len(c.Params))
 	}
 
-	if cap.Params[0].Name != "status" {
-		t.Errorf("Params[0].Name = %q, want %q", cap.Params[0].Name, "status")
+	if c.Params[0].Name != "status" {
+		t.Errorf("Params[0].Name = %q, want %q", c.Params[0].Name, "status")
 	}
 }
 
 func TestAddSelect(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -186,14 +188,14 @@ func TestAddSelect(t *testing.T) {
 		t.Error("HasSelect('by-email') = false after AddSelect")
 	}
 
-	cap, _ := factory.GetSelect("by-email")
-	if len(cap.Params) != 1 || cap.Params[0].Name != "email" {
+	c, _ := factory.GetSelect("by-email")
+	if len(c.Params) != 1 || c.Params[0].Name != "email" {
 		t.Error("Params not correctly derived for by-email capability")
 	}
 }
 
 func TestAddUpdate(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -212,15 +214,15 @@ func TestAddUpdate(t *testing.T) {
 		t.Error("HasUpdate('update-name') = false after AddUpdate")
 	}
 
-	cap, _ := factory.GetUpdate("update-name")
+	c, _ := factory.GetUpdate("update-name")
 	// Should have params for both SET and WHERE
-	if len(cap.Params) != 2 {
-		t.Errorf("Params has %d entries, want 2", len(cap.Params))
+	if len(c.Params) != 2 {
+		t.Errorf("Params has %d entries, want 2", len(c.Params))
 	}
 }
 
 func TestAddDelete(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -240,7 +242,7 @@ func TestAddDelete(t *testing.T) {
 }
 
 func TestAddAggregate(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -257,14 +259,14 @@ func TestAddAggregate(t *testing.T) {
 		t.Error("HasAggregate('sum-ages') = false after AddAggregate")
 	}
 
-	cap, _ := factory.GetAggregate("sum-ages")
-	if cap.Func != AggSum {
-		t.Errorf("Func = %q, want %q", cap.Func, AggSum)
+	c, _ := factory.GetAggregate("sum-ages")
+	if c.Func != AggSum {
+		t.Errorf("Func = %q, want %q", c.Func, AggSum)
 	}
 }
 
 func TestRemoveCapabilities(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -285,7 +287,7 @@ func TestRemoveCapabilities(t *testing.T) {
 }
 
 func TestListCapabilities(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -317,7 +319,7 @@ func TestListCapabilities(t *testing.T) {
 }
 
 func TestConditionGroupsInCapability(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -339,32 +341,32 @@ func TestConditionGroupsInCapability(t *testing.T) {
 		},
 	})
 
-	cap, ok := factory.GetQuery("active-or-pending")
+	c, ok := factory.GetQuery("active-or-pending")
 	if !ok {
 		t.Fatal("GetQuery('active-or-pending') returned false")
 	}
 
 	// Verify the spec has the OR group
-	if len(cap.Spec.Where) != 1 {
-		t.Fatalf("Spec.Where has %d conditions, want 1", len(cap.Spec.Where))
+	if len(c.Spec.Where) != 1 {
+		t.Fatalf("Spec.Where has %d conditions, want 1", len(c.Spec.Where))
 	}
 
-	if cap.Spec.Where[0].Logic != "OR" {
-		t.Errorf("Where[0].Logic = %q, want %q", cap.Spec.Where[0].Logic, "OR")
+	if c.Spec.Where[0].Logic != "OR" {
+		t.Errorf("Where[0].Logic = %q, want %q", c.Spec.Where[0].Logic, "OR")
 	}
 
-	if len(cap.Spec.Where[0].Group) != 2 {
-		t.Errorf("Where[0].Group has %d conditions, want 2", len(cap.Spec.Where[0].Group))
+	if len(c.Spec.Where[0].Group) != 2 {
+		t.Errorf("Where[0].Group has %d conditions, want 2", len(c.Spec.Where[0].Group))
 	}
 
 	// Params should be derived from nested conditions
-	if len(cap.Params) != 2 {
-		t.Errorf("Params has %d entries, want 2 (from nested OR group)", len(cap.Params))
+	if len(c.Params) != 2 {
+		t.Errorf("Params has %d entries, want 2 (from nested OR group)", len(c.Params))
 	}
 }
 
 func TestMixedConditionsInCapability(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -386,19 +388,19 @@ func TestMixedConditionsInCapability(t *testing.T) {
 		},
 	})
 
-	cap, ok := factory.GetQuery("complex-query")
+	c, ok := factory.GetQuery("complex-query")
 	if !ok {
 		t.Fatal("GetQuery('complex-query') returned false")
 	}
 
 	// Should have params: min_age, name1, name2
-	if len(cap.Params) != 3 {
-		t.Errorf("Params has %d entries, want 3", len(cap.Params))
+	if len(c.Params) != 3 {
+		t.Errorf("Params has %d entries, want 3", len(c.Params))
 	}
 
 	// Verify param names
 	paramNames := make(map[string]bool)
-	for _, p := range cap.Params {
+	for _, p := range c.Params {
 		paramNames[p.Name] = true
 	}
 
@@ -411,7 +413,7 @@ func TestMixedConditionsInCapability(t *testing.T) {
 }
 
 func TestOrderByExpressionInCapability(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -433,17 +435,17 @@ func TestOrderByExpressionInCapability(t *testing.T) {
 		},
 	})
 
-	cap, ok := factory.GetQuery("similar-users")
+	c, ok := factory.GetQuery("similar-users")
 	if !ok {
 		t.Fatal("GetQuery('similar-users') returned false")
 	}
 
 	// Verify the spec has vector ORDER BY
-	if len(cap.Spec.OrderBy) != 1 {
-		t.Fatalf("Spec.OrderBy has %d entries, want 1", len(cap.Spec.OrderBy))
+	if len(c.Spec.OrderBy) != 1 {
+		t.Fatalf("Spec.OrderBy has %d entries, want 1", len(c.Spec.OrderBy))
 	}
 
-	orderBy := cap.Spec.OrderBy[0]
+	orderBy := c.Spec.OrderBy[0]
 	if orderBy.Field != "embedding" {
 		t.Errorf("OrderBy.Field = %q, want %q", orderBy.Field, "embedding")
 	}
@@ -459,7 +461,7 @@ func TestOrderByExpressionInCapability(t *testing.T) {
 }
 
 func TestNestedConditionGroupsInUpdateAndDelete(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -526,7 +528,7 @@ type UserNoPK struct {
 }
 
 func TestNew_MissingPrimaryKey(t *testing.T) {
-	_, err := New[UserNoPK](nil, "users")
+	_, err := New[UserNoPK](nil, "users", postgres.New())
 	if err == nil {
 		t.Error("New() should fail when struct has no primary key constraint")
 	}
@@ -538,7 +540,7 @@ func TestNew_MissingPrimaryKey(t *testing.T) {
 }
 
 func TestInsertFromSpec_InvalidConflictAction(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -556,7 +558,7 @@ func TestInsertFromSpec_InvalidConflictAction(t *testing.T) {
 }
 
 func TestInsertFromSpec_MissingConflictAction(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -574,7 +576,7 @@ func TestInsertFromSpec_MissingConflictAction(t *testing.T) {
 }
 
 func TestSelectFromSpec_InvalidLockMode(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -587,5 +589,418 @@ func TestSelectFromSpec_InvalidLockMode(t *testing.T) {
 	_, err = factory.selectFromSpec(spec)
 	if err == nil {
 		t.Error("selectFromSpec() should fail with invalid lock mode")
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Depth Limit Tests
+// -----------------------------------------------------------------------------
+
+func TestMaxConditionDepth_Default(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	if factory.MaxConditionDepth() != DefaultMaxConditionDepth {
+		t.Errorf("MaxConditionDepth() = %d, want %d", factory.MaxConditionDepth(), DefaultMaxConditionDepth)
+	}
+}
+
+func TestMaxConditionDepth_Configurable(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	factory.SetMaxConditionDepth(5)
+	if factory.MaxConditionDepth() != 5 {
+		t.Errorf("MaxConditionDepth() = %d, want 5", factory.MaxConditionDepth())
+	}
+
+	factory.SetMaxConditionDepth(0)
+	if factory.MaxConditionDepth() != 0 {
+		t.Errorf("MaxConditionDepth() = %d, want 0 (disabled)", factory.MaxConditionDepth())
+	}
+}
+
+func TestAddQuery_DepthExceeded(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Set a low depth limit
+	factory.SetMaxConditionDepth(2)
+
+	// Create a deeply nested condition (depth 3)
+	deepCondition := QueryCapability{
+		Name: "deep-query",
+		Spec: QuerySpec{
+			Where: []ConditionSpec{
+				{
+					Logic: "AND",
+					Group: []ConditionSpec{
+						{
+							Logic: "OR",
+							Group: []ConditionSpec{
+								{
+									Logic: "AND",
+									Group: []ConditionSpec{
+										{Field: "name", Operator: "=", Param: "name"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = factory.AddQuery(deepCondition)
+	if err == nil {
+		t.Error("AddQuery() should fail when condition depth exceeds maximum")
+	}
+
+	if !strings.Contains(err.Error(), "maximum condition depth exceeded") {
+		t.Errorf("error should mention 'maximum condition depth exceeded', got: %v", err)
+	}
+}
+
+func TestAddQuery_DepthWithinLimit(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Set depth limit to 3
+	factory.SetMaxConditionDepth(3)
+
+	// Create a nested condition (depth 2, within limit)
+	nestedCondition := QueryCapability{
+		Name: "nested-query",
+		Spec: QuerySpec{
+			Where: []ConditionSpec{
+				{
+					Logic: "AND",
+					Group: []ConditionSpec{
+						{
+							Logic: "OR",
+							Group: []ConditionSpec{
+								{Field: "name", Operator: "=", Param: "name"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = factory.AddQuery(nestedCondition)
+	if err != nil {
+		t.Errorf("AddQuery() should succeed when depth is within limit: %v", err)
+	}
+
+	if !factory.HasQuery("nested-query") {
+		t.Error("nested-query should be registered")
+	}
+}
+
+func TestAddQuery_DepthCheckDisabled(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Disable depth checking
+	factory.SetMaxConditionDepth(0)
+
+	// Create a very deeply nested condition
+	deepCondition := QueryCapability{
+		Name: "very-deep-query",
+		Spec: QuerySpec{
+			Where: []ConditionSpec{
+				{
+					Logic: "AND",
+					Group: []ConditionSpec{
+						{
+							Logic: "OR",
+							Group: []ConditionSpec{
+								{
+									Logic: "AND",
+									Group: []ConditionSpec{
+										{
+											Logic: "OR",
+											Group: []ConditionSpec{
+												{Field: "name", Operator: "=", Param: "name"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = factory.AddQuery(deepCondition)
+	if err != nil {
+		t.Errorf("AddQuery() should succeed when depth checking is disabled: %v", err)
+	}
+}
+
+func TestAddSelect_DepthExceeded(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	factory.SetMaxConditionDepth(1)
+
+	deepSelect := SelectCapability{
+		Name: "deep-select",
+		Spec: SelectSpec{
+			Where: []ConditionSpec{
+				{
+					Logic: "AND",
+					Group: []ConditionSpec{
+						{
+							Logic: "OR",
+							Group: []ConditionSpec{
+								{Field: "id", Operator: "=", Param: "id"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = factory.AddSelect(deepSelect)
+	if err == nil {
+		t.Error("AddSelect() should fail when condition depth exceeds maximum")
+	}
+}
+
+func TestAddUpdate_DepthExceeded(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	factory.SetMaxConditionDepth(1)
+
+	deepUpdate := UpdateCapability{
+		Name: "deep-update",
+		Spec: UpdateSpec{
+			Set: map[string]string{"name": "new_name"},
+			Where: []ConditionSpec{
+				{
+					Logic: "AND",
+					Group: []ConditionSpec{
+						{
+							Logic: "OR",
+							Group: []ConditionSpec{
+								{Field: "id", Operator: "=", Param: "id"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = factory.AddUpdate(deepUpdate)
+	if err == nil {
+		t.Error("AddUpdate() should fail when condition depth exceeds maximum")
+	}
+}
+
+func TestAddDelete_DepthExceeded(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	factory.SetMaxConditionDepth(1)
+
+	deepDelete := DeleteCapability{
+		Name: "deep-delete",
+		Spec: DeleteSpec{
+			Where: []ConditionSpec{
+				{
+					Logic: "AND",
+					Group: []ConditionSpec{
+						{
+							Logic: "OR",
+							Group: []ConditionSpec{
+								{Field: "id", Operator: "=", Param: "id"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = factory.AddDelete(deepDelete)
+	if err == nil {
+		t.Error("AddDelete() should fail when condition depth exceeds maximum")
+	}
+}
+
+func TestAddAggregate_DepthExceeded(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	factory.SetMaxConditionDepth(1)
+
+	deepAggregate := AggregateCapability{
+		Name: "deep-aggregate",
+		Func: AggCount,
+		Spec: AggregateSpec{
+			Where: []ConditionSpec{
+				{
+					Logic: "AND",
+					Group: []ConditionSpec{
+						{
+							Logic: "OR",
+							Group: []ConditionSpec{
+								{Field: "id", Operator: "=", Param: "id"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = factory.AddAggregate(deepAggregate)
+	if err == nil {
+		t.Error("AddAggregate() should fail when condition depth exceeds maximum")
+	}
+}
+
+// -----------------------------------------------------------------------------
+// SQL Cache Tests
+// -----------------------------------------------------------------------------
+
+func TestRenderQuery_Caching(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// First render should populate cache
+	sql1, err := factory.RenderQuery("query")
+	if err != nil {
+		t.Fatalf("RenderQuery() failed: %v", err)
+	}
+
+	// Second render should return cached value
+	sql2, err := factory.RenderQuery("query")
+	if err != nil {
+		t.Fatalf("RenderQuery() failed on second call: %v", err)
+	}
+
+	if sql1 != sql2 {
+		t.Errorf("cached SQL should match: %q != %q", sql1, sql2)
+	}
+}
+
+func TestRenderSelect_Caching(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	sql1, err := factory.RenderSelect("select")
+	if err != nil {
+		t.Fatalf("RenderSelect() failed: %v", err)
+	}
+
+	sql2, err := factory.RenderSelect("select")
+	if err != nil {
+		t.Fatalf("RenderSelect() failed on second call: %v", err)
+	}
+
+	if sql1 != sql2 {
+		t.Errorf("cached SQL should match: %q != %q", sql1, sql2)
+	}
+}
+
+func TestCache_InvalidatedOnAdd(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Render to populate cache
+	sql1, err := factory.RenderQuery("query")
+	if err != nil {
+		t.Fatalf("RenderQuery() failed: %v", err)
+	}
+
+	// Re-add the same capability with different spec
+	err = factory.AddQuery(QueryCapability{
+		Name: "query",
+		Spec: QuerySpec{
+			Where: []ConditionSpec{
+				{Field: "name", Operator: "=", Param: "name"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddQuery() failed: %v", err)
+	}
+
+	// Render again - should get new SQL
+	sql2, err := factory.RenderQuery("query")
+	if err != nil {
+		t.Fatalf("RenderQuery() failed after re-add: %v", err)
+	}
+
+	if sql1 == sql2 {
+		t.Error("SQL should differ after capability was re-added with different spec")
+	}
+}
+
+func TestCache_InvalidatedOnRemove(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a custom query
+	err = factory.AddQuery(QueryCapability{
+		Name: "custom",
+		Spec: QuerySpec{
+			Where: []ConditionSpec{
+				{Field: "name", Operator: "=", Param: "name"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddQuery() failed: %v", err)
+	}
+
+	// Render to populate cache
+	_, err = factory.RenderQuery("custom")
+	if err != nil {
+		t.Fatalf("RenderQuery() failed: %v", err)
+	}
+
+	// Remove the capability
+	factory.RemoveQuery("custom")
+
+	// Render should now fail
+	_, err = factory.RenderQuery("custom")
+	if err == nil {
+		t.Error("RenderQuery() should fail after capability was removed")
 	}
 }

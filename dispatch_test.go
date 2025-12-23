@@ -1,11 +1,14 @@
 package edamame
 
 import (
+	"context"
 	"testing"
+
+	"github.com/zoobzio/astql/pkg/postgres"
 )
 
 func TestQueryDispatch(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -31,7 +34,7 @@ func TestQueryDispatch(t *testing.T) {
 }
 
 func TestSelectDispatch(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -56,7 +59,7 @@ func TestSelectDispatch(t *testing.T) {
 }
 
 func TestUpdateDispatch(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -91,7 +94,7 @@ func TestUpdateDispatch(t *testing.T) {
 }
 
 func TestDeleteDispatch(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -115,7 +118,7 @@ func TestDeleteDispatch(t *testing.T) {
 }
 
 func TestAggregateDispatch(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -139,7 +142,7 @@ func TestAggregateDispatch(t *testing.T) {
 }
 
 func TestInsertDispatch(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -160,7 +163,7 @@ func TestInsertDispatch(t *testing.T) {
 }
 
 func TestCustomQueryDispatch(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -196,7 +199,7 @@ func TestCustomQueryDispatch(t *testing.T) {
 }
 
 func TestAggregateDispatchVariants(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -241,7 +244,7 @@ func TestAggregateDispatchVariants(t *testing.T) {
 }
 
 func TestDispatchMissingCapability(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -274,7 +277,7 @@ func TestDispatchMissingCapability(t *testing.T) {
 }
 
 func TestBuilderChaining(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -305,7 +308,7 @@ func intPtr(i int) *int {
 }
 
 func TestRenderMethods(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -346,7 +349,7 @@ func TestRenderMethods(t *testing.T) {
 }
 
 func TestRenderMissingCapability(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -378,18 +381,18 @@ func TestRenderMissingCapability(t *testing.T) {
 }
 
 func TestBatchDispatchMissingCapability(t *testing.T) {
-	factory, err := New[User](nil, "users")
+	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
 
 	// Batch update/delete should fail for nonexistent capabilities
-	_, err = factory.ExecUpdateBatch(nil, "nonexistent", nil)
+	_, err = factory.ExecUpdateBatch(context.TODO(), "nonexistent", nil)
 	if err == nil {
 		t.Error("ExecUpdateBatch('nonexistent') should return error")
 	}
 
-	_, err = factory.ExecDeleteBatch(nil, "nonexistent", nil)
+	_, err = factory.ExecDeleteBatch(context.TODO(), "nonexistent", nil)
 	if err == nil {
 		t.Error("ExecDeleteBatch('nonexistent') should return error")
 	}

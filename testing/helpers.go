@@ -235,8 +235,8 @@ func NewSpecValidator() *SpecValidator {
 
 // HasQuery checks if a spec contains a query capability with the given name.
 func (*SpecValidator) HasQuery(spec edamame.FactorySpec, name string) bool {
-	for _, q := range spec.Queries {
-		if q.Name == name {
+	for i := range spec.Queries {
+		if spec.Queries[i].Name == name {
 			return true
 		}
 	}
@@ -245,8 +245,8 @@ func (*SpecValidator) HasQuery(spec edamame.FactorySpec, name string) bool {
 
 // HasSelect checks if a spec contains a select capability with the given name.
 func (*SpecValidator) HasSelect(spec edamame.FactorySpec, name string) bool {
-	for _, s := range spec.Selects {
-		if s.Name == name {
+	for i := range spec.Selects {
+		if spec.Selects[i].Name == name {
 			return true
 		}
 	}
@@ -285,9 +285,9 @@ func (*SpecValidator) HasAggregate(spec edamame.FactorySpec, name string) bool {
 
 // QueryByName returns a query capability by name, or nil if not found.
 func (*SpecValidator) QueryByName(spec edamame.FactorySpec, name string) *edamame.QueryCapabilitySpec {
-	for _, q := range spec.Queries {
-		if q.Name == name {
-			return &q
+	for i := range spec.Queries {
+		if spec.Queries[i].Name == name {
+			return &spec.Queries[i]
 		}
 	}
 	return nil
@@ -295,9 +295,9 @@ func (*SpecValidator) QueryByName(spec edamame.FactorySpec, name string) *edamam
 
 // SelectByName returns a select capability by name, or nil if not found.
 func (*SpecValidator) SelectByName(spec edamame.FactorySpec, name string) *edamame.SelectCapabilitySpec {
-	for _, s := range spec.Selects {
-		if s.Name == name {
-			return &s
+	for i := range spec.Selects {
+		if spec.Selects[i].Name == name {
+			return &spec.Selects[i]
 		}
 	}
 	return nil

@@ -17,6 +17,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/zoobzio/astql/pkg/postgres"
 	"github.com/zoobzio/edamame"
 )
 
@@ -142,7 +143,7 @@ func TestPostgresIntegration_FactoryCreation(t *testing.T) {
 		t.Fatalf("failed to setup users table: %v", err)
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}
@@ -185,7 +186,7 @@ func TestPostgresIntegration_QueryAll(t *testing.T) {
 		t.Fatalf("failed to insert user: %v", err)
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}
@@ -219,7 +220,7 @@ func TestPostgresIntegration_SelectByPrimaryKey(t *testing.T) {
 		t.Fatalf("failed to insert user: %v", err)
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}
@@ -250,7 +251,7 @@ func TestPostgresIntegration_Insert(t *testing.T) {
 		t.Fatalf("failed to setup users table: %v", err)
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}
@@ -303,7 +304,7 @@ func TestPostgresIntegration_Delete(t *testing.T) {
 		t.Fatalf("failed to insert user: %v", err)
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}
@@ -346,7 +347,7 @@ func TestPostgresIntegration_Count(t *testing.T) {
 		}
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}
@@ -383,7 +384,7 @@ func TestPostgresIntegration_CustomQuery(t *testing.T) {
 		}
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}
@@ -432,7 +433,7 @@ func TestPostgresIntegration_Transaction(t *testing.T) {
 		t.Fatalf("failed to setup users table: %v", err)
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}
@@ -494,7 +495,7 @@ func TestPostgresIntegration_BatchInsert(t *testing.T) {
 		t.Fatalf("failed to setup users table: %v", err)
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}
@@ -543,7 +544,7 @@ func TestPostgresIntegration_Spec(t *testing.T) {
 		t.Fatalf("failed to setup users table: %v", err)
 	}
 
-	factory, err := edamame.New[User](pg.DB(), "users")
+	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
 	if err != nil {
 		t.Fatalf("failed to create factory: %v", err)
 	}

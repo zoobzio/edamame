@@ -17,7 +17,9 @@
 //
 // Create a Factory instance (CRUD capabilities are registered automatically):
 //
-//	factory, err := edamame.New[User](db, "users")
+//	import "github.com/zoobzio/astql/pkg/postgres"
+//
+//	factory, err := edamame.New[User](db, "users", postgres.New())
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
@@ -70,13 +72,18 @@ import (
 	"sync"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/zoobzio/astql"
 	"github.com/zoobzio/capitan"
 	"github.com/zoobzio/cereal"
 )
 
+// DefaultMaxConditionDepth is the default maximum nesting depth for condition groups.
+const DefaultMaxConditionDepth = 10
+
 // Factory provides a capability-driven query API for a specific model type.
 // It wraps cereal with named, introspectable query capabilities.
 type Factory[T any] struct {
+	db         *sqlx.DB
 	cereal     *cereal.Cereal[T]
 	primaryKey string
 
@@ -86,24 +93,33 @@ type Factory[T any] struct {
 	deletes    map[string]DeleteCapability
 	aggregates map[string]AggregateCapability
 
+	// Configuration
+	maxConditionDepth int
+
+	// SQL cache (keyed by "type:name", e.g., "query:active-users")
+	sqlCache map[string]string
+
 	mu sync.RWMutex
 }
 
-// New creates a new Factory for type T with the given database connection and table name.
+// New creates a new Factory for type T with the given database connection, table name, and renderer.
 // CRUD capabilities are registered automatically based on struct metadata.
-func New[T any](db *sqlx.DB, tableName string) (*Factory[T], error) {
-	c, err := cereal.New[T](db, tableName)
+func New[T any](db *sqlx.DB, tableName string, renderer astql.Renderer) (*Factory[T], error) {
+	c, err := cereal.New[T](db, tableName, renderer)
 	if err != nil {
 		return nil, fmt.Errorf("edamame: failed to create cereal instance: %w", err)
 	}
 
 	f := &Factory[T]{
-		cereal:     c,
-		queries:    make(map[string]QueryCapability),
-		selects:    make(map[string]SelectCapability),
-		updates:    make(map[string]UpdateCapability),
-		deletes:    make(map[string]DeleteCapability),
-		aggregates: make(map[string]AggregateCapability),
+		db:                db,
+		cereal:            c,
+		queries:           make(map[string]QueryCapability),
+		selects:           make(map[string]SelectCapability),
+		updates:           make(map[string]UpdateCapability),
+		deletes:           make(map[string]DeleteCapability),
+		aggregates:        make(map[string]AggregateCapability),
+		maxConditionDepth: DefaultMaxConditionDepth,
+		sqlCache:          make(map[string]string),
 	}
 
 	// Find primary key from metadata
@@ -128,7 +144,19 @@ func (f *Factory[T]) Cereal() *cereal.Cereal[T] {
 }
 
 // RenderQuery renders a query capability to SQL for inspection or debugging.
+// Results are cached until the capability is modified or removed.
 func (f *Factory[T]) RenderQuery(name string) (string, error) {
+	cacheKey := "query:" + name
+
+	// Check cache first
+	f.mu.RLock()
+	if sql, ok := f.sqlCache[cacheKey]; ok {
+		f.mu.RUnlock()
+		return sql, nil
+	}
+	f.mu.RUnlock()
+
+	// Build and render
 	q, err := f.Query(name)
 	if err != nil {
 		return "", err
@@ -137,11 +165,29 @@ func (f *Factory[T]) RenderQuery(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Cache the result
+	f.mu.Lock()
+	f.sqlCache[cacheKey] = result.SQL
+	f.mu.Unlock()
+
 	return result.SQL, nil
 }
 
 // RenderSelect renders a select capability to SQL for inspection or debugging.
+// Results are cached until the capability is modified or removed.
 func (f *Factory[T]) RenderSelect(name string) (string, error) {
+	cacheKey := "select:" + name
+
+	// Check cache first
+	f.mu.RLock()
+	if sql, ok := f.sqlCache[cacheKey]; ok {
+		f.mu.RUnlock()
+		return sql, nil
+	}
+	f.mu.RUnlock()
+
+	// Build and render
 	s, err := f.Select(name)
 	if err != nil {
 		return "", err
@@ -150,11 +196,29 @@ func (f *Factory[T]) RenderSelect(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Cache the result
+	f.mu.Lock()
+	f.sqlCache[cacheKey] = result.SQL
+	f.mu.Unlock()
+
 	return result.SQL, nil
 }
 
 // RenderUpdate renders an update capability to SQL for inspection or debugging.
+// Results are cached until the capability is modified or removed.
 func (f *Factory[T]) RenderUpdate(name string) (string, error) {
+	cacheKey := "update:" + name
+
+	// Check cache first
+	f.mu.RLock()
+	if sql, ok := f.sqlCache[cacheKey]; ok {
+		f.mu.RUnlock()
+		return sql, nil
+	}
+	f.mu.RUnlock()
+
+	// Build and render
 	u, err := f.Update(name)
 	if err != nil {
 		return "", err
@@ -163,11 +227,29 @@ func (f *Factory[T]) RenderUpdate(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Cache the result
+	f.mu.Lock()
+	f.sqlCache[cacheKey] = result.SQL
+	f.mu.Unlock()
+
 	return result.SQL, nil
 }
 
 // RenderDelete renders a delete capability to SQL for inspection or debugging.
+// Results are cached until the capability is modified or removed.
 func (f *Factory[T]) RenderDelete(name string) (string, error) {
+	cacheKey := "delete:" + name
+
+	// Check cache first
+	f.mu.RLock()
+	if sql, ok := f.sqlCache[cacheKey]; ok {
+		f.mu.RUnlock()
+		return sql, nil
+	}
+	f.mu.RUnlock()
+
+	// Build and render
 	d, err := f.Delete(name)
 	if err != nil {
 		return "", err
@@ -176,11 +258,29 @@ func (f *Factory[T]) RenderDelete(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Cache the result
+	f.mu.Lock()
+	f.sqlCache[cacheKey] = result.SQL
+	f.mu.Unlock()
+
 	return result.SQL, nil
 }
 
 // RenderAggregate renders an aggregate capability to SQL for inspection or debugging.
+// Results are cached until the capability is modified or removed.
 func (f *Factory[T]) RenderAggregate(name string) (string, error) {
+	cacheKey := "aggregate:" + name
+
+	// Check cache first
+	f.mu.RLock()
+	if sql, ok := f.sqlCache[cacheKey]; ok {
+		f.mu.RUnlock()
+		return sql, nil
+	}
+	f.mu.RUnlock()
+
+	// Build and render
 	a, err := f.Aggregate(name)
 	if err != nil {
 		return "", err
@@ -189,12 +289,101 @@ func (f *Factory[T]) RenderAggregate(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Cache the result
+	f.mu.Lock()
+	f.sqlCache[cacheKey] = result.SQL
+	f.mu.Unlock()
+
 	return result.SQL, nil
+}
+
+// RenderCompound renders a compound query to SQL for inspection or debugging.
+func (f *Factory[T]) RenderCompound(spec CompoundQuerySpec) (string, error) {
+	c, err := f.Compound(spec)
+	if err != nil {
+		return "", err
+	}
+	result, err := c.Render()
+	if err != nil {
+		return "", err
+	}
+	return result.SQL, nil
+}
+
+// PrepareQuery creates a prepared statement for a query capability.
+// The prepared statement can be reused for better performance.
+// The caller is responsible for closing the statement when done.
+func (f *Factory[T]) PrepareQuery(ctx context.Context, name string) (*sqlx.Stmt, error) {
+	sql, err := f.RenderQuery(name)
+	if err != nil {
+		return nil, err
+	}
+	return f.db.PreparexContext(ctx, sql)
+}
+
+// PrepareSelect creates a prepared statement for a select capability.
+// The prepared statement can be reused for better performance.
+// The caller is responsible for closing the statement when done.
+func (f *Factory[T]) PrepareSelect(ctx context.Context, name string) (*sqlx.Stmt, error) {
+	sql, err := f.RenderSelect(name)
+	if err != nil {
+		return nil, err
+	}
+	return f.db.PreparexContext(ctx, sql)
+}
+
+// PrepareUpdate creates a prepared statement for an update capability.
+// The prepared statement can be reused for better performance.
+// The caller is responsible for closing the statement when done.
+func (f *Factory[T]) PrepareUpdate(ctx context.Context, name string) (*sqlx.Stmt, error) {
+	sql, err := f.RenderUpdate(name)
+	if err != nil {
+		return nil, err
+	}
+	return f.db.PreparexContext(ctx, sql)
+}
+
+// PrepareDelete creates a prepared statement for a delete capability.
+// The prepared statement can be reused for better performance.
+// The caller is responsible for closing the statement when done.
+func (f *Factory[T]) PrepareDelete(ctx context.Context, name string) (*sqlx.Stmt, error) {
+	sql, err := f.RenderDelete(name)
+	if err != nil {
+		return nil, err
+	}
+	return f.db.PreparexContext(ctx, sql)
+}
+
+// PrepareAggregate creates a prepared statement for an aggregate capability.
+// The prepared statement can be reused for better performance.
+// The caller is responsible for closing the statement when done.
+func (f *Factory[T]) PrepareAggregate(ctx context.Context, name string) (*sqlx.Stmt, error) {
+	sql, err := f.RenderAggregate(name)
+	if err != nil {
+		return nil, err
+	}
+	return f.db.PreparexContext(ctx, sql)
 }
 
 // TableName returns the table name for this factory.
 func (f *Factory[T]) TableName() string {
 	return f.cereal.TableName()
+}
+
+// SetMaxConditionDepth sets the maximum nesting depth for condition groups.
+// A depth of 0 or negative disables depth checking.
+func (f *Factory[T]) SetMaxConditionDepth(depth int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.maxConditionDepth = depth
+}
+
+// MaxConditionDepth returns the current maximum condition depth setting.
+func (f *Factory[T]) MaxConditionDepth() int {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.maxConditionDepth
 }
 
 // findPrimaryKey extracts the primary key field from struct metadata.
@@ -280,116 +469,174 @@ func (f *Factory[T]) fieldType(fieldName string) string {
 }
 
 // AddQuery registers a custom query capability.
-func (f *Factory[T]) AddQuery(cap QueryCapability) {
+// Returns ErrMaxDepthExceeded if the spec's condition nesting exceeds the configured maximum.
+func (f *Factory[T]) AddQuery(c QueryCapability) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Derive params from spec if not provided
-	if len(cap.Params) == 0 {
-		cap.Params = f.deriveQueryParams(cap.Spec)
+	if len(c.Params) == 0 {
+		params, err := f.deriveQueryParams(c.Spec)
+		if err != nil {
+			return fmt.Errorf("query %q: %w", c.Name, err)
+		}
+		c.Params = params
 	}
 
-	f.queries[cap.Name] = cap
+	// Invalidate cache for this capability
+	delete(f.sqlCache, "query:"+c.Name)
+
+	f.queries[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
 		KeyTable.Field(f.cereal.TableName()),
-		KeyCapability.Field(cap.Name),
+		KeyCapability.Field(c.Name),
 		KeyType.Field("query"))
+
+	return nil
 }
 
 // AddSelect registers a custom select capability.
-func (f *Factory[T]) AddSelect(cap SelectCapability) {
+// Returns ErrMaxDepthExceeded if the spec's condition nesting exceeds the configured maximum.
+func (f *Factory[T]) AddSelect(c SelectCapability) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if len(cap.Params) == 0 {
-		cap.Params = f.deriveSelectParams(cap.Spec)
+	if len(c.Params) == 0 {
+		params, err := f.deriveSelectParams(c.Spec)
+		if err != nil {
+			return fmt.Errorf("select %q: %w", c.Name, err)
+		}
+		c.Params = params
 	}
 
-	f.selects[cap.Name] = cap
+	// Invalidate cache for this capability
+	delete(f.sqlCache, "select:"+c.Name)
+
+	f.selects[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
 		KeyTable.Field(f.cereal.TableName()),
-		KeyCapability.Field(cap.Name),
+		KeyCapability.Field(c.Name),
 		KeyType.Field("select"))
+
+	return nil
 }
 
 // AddUpdate registers a custom update capability.
-func (f *Factory[T]) AddUpdate(cap UpdateCapability) {
+// Returns ErrMaxDepthExceeded if the spec's condition nesting exceeds the configured maximum.
+func (f *Factory[T]) AddUpdate(c UpdateCapability) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if len(cap.Params) == 0 {
-		cap.Params = f.deriveUpdateParams(cap.Spec)
+	if len(c.Params) == 0 {
+		params, err := f.deriveUpdateParams(c.Spec)
+		if err != nil {
+			return fmt.Errorf("update %q: %w", c.Name, err)
+		}
+		c.Params = params
 	}
 
-	f.updates[cap.Name] = cap
+	// Invalidate cache for this capability
+	delete(f.sqlCache, "update:"+c.Name)
+
+	f.updates[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
 		KeyTable.Field(f.cereal.TableName()),
-		KeyCapability.Field(cap.Name),
+		KeyCapability.Field(c.Name),
 		KeyType.Field("update"))
+
+	return nil
 }
 
 // AddDelete registers a custom delete capability.
-func (f *Factory[T]) AddDelete(cap DeleteCapability) {
+// Returns ErrMaxDepthExceeded if the spec's condition nesting exceeds the configured maximum.
+func (f *Factory[T]) AddDelete(c DeleteCapability) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if len(cap.Params) == 0 {
-		cap.Params = f.deriveParams(cap.Spec.Where)
+	if len(c.Params) == 0 {
+		params, err := f.deriveParams(c.Spec.Where)
+		if err != nil {
+			return fmt.Errorf("delete %q: %w", c.Name, err)
+		}
+		c.Params = params
 	}
 
-	f.deletes[cap.Name] = cap
+	// Invalidate cache for this capability
+	delete(f.sqlCache, "delete:"+c.Name)
+
+	f.deletes[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
 		KeyTable.Field(f.cereal.TableName()),
-		KeyCapability.Field(cap.Name),
+		KeyCapability.Field(c.Name),
 		KeyType.Field("delete"))
+
+	return nil
 }
 
 // AddAggregate registers a custom aggregate capability.
-func (f *Factory[T]) AddAggregate(cap AggregateCapability) {
+// Returns ErrMaxDepthExceeded if the spec's condition nesting exceeds the configured maximum.
+func (f *Factory[T]) AddAggregate(c AggregateCapability) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if len(cap.Params) == 0 {
-		cap.Params = f.deriveParams(cap.Spec.Where)
+	if len(c.Params) == 0 {
+		params, err := f.deriveParams(c.Spec.Where)
+		if err != nil {
+			return fmt.Errorf("aggregate %q: %w", c.Name, err)
+		}
+		c.Params = params
 	}
 
-	f.aggregates[cap.Name] = cap
+	// Invalidate cache for this capability
+	delete(f.sqlCache, "aggregate:"+c.Name)
+
+	f.aggregates[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
 		KeyTable.Field(f.cereal.TableName()),
-		KeyCapability.Field(cap.Name),
+		KeyCapability.Field(c.Name),
 		KeyType.Field("aggregate"))
+
+	return nil
 }
 
 // deriveParams extracts parameter specifications from WHERE conditions.
 // Handles nested condition groups (AND/OR) recursively.
-func (f *Factory[T]) deriveParams(conditions []ConditionSpec) []ParamSpec {
+// Returns ErrMaxDepthExceeded if nesting depth exceeds the configured maximum.
+func (f *Factory[T]) deriveParams(conditions []ConditionSpec) ([]ParamSpec, error) {
 	if len(conditions) == 0 {
-		return []ParamSpec{}
+		return []ParamSpec{}, nil
 	}
 
 	params := make([]ParamSpec, 0, len(conditions))
 	seen := make(map[string]bool)
 
-	f.collectParams(conditions, seen, &params)
+	if err := f.collectParams(conditions, seen, &params, 1); err != nil {
+		return nil, err
+	}
 
-	return params
+	return params, nil
 }
 
 // deriveQueryParams extracts params from all parts of a QuerySpec.
-func (f *Factory[T]) deriveQueryParams(spec QuerySpec) []ParamSpec {
+// Returns ErrMaxDepthExceeded if nesting depth exceeds the configured maximum.
+func (f *Factory[T]) deriveQueryParams(spec QuerySpec) ([]ParamSpec, error) {
 	seen := make(map[string]bool)
 	params := make([]ParamSpec, 0)
 
 	// WHERE conditions
-	f.collectParams(spec.Where, seen, &params)
+	if err := f.collectParams(spec.Where, seen, &params, 1); err != nil {
+		return nil, err
+	}
 
 	// HAVING conditions
-	f.collectParams(spec.Having, seen, &params)
+	if err := f.collectParams(spec.Having, seen, &params, 1); err != nil {
+		return nil, err
+	}
 
 	// HAVING aggregate conditions
 	for _, h := range spec.HavingAgg {
@@ -415,19 +662,24 @@ func (f *Factory[T]) deriveQueryParams(spec QuerySpec) []ParamSpec {
 		}
 	}
 
-	return params
+	return params, nil
 }
 
 // deriveSelectParams extracts params from all parts of a SelectSpec.
-func (f *Factory[T]) deriveSelectParams(spec SelectSpec) []ParamSpec {
+// Returns ErrMaxDepthExceeded if nesting depth exceeds the configured maximum.
+func (f *Factory[T]) deriveSelectParams(spec SelectSpec) ([]ParamSpec, error) {
 	seen := make(map[string]bool)
 	params := make([]ParamSpec, 0)
 
 	// WHERE conditions
-	f.collectParams(spec.Where, seen, &params)
+	if err := f.collectParams(spec.Where, seen, &params, 1); err != nil {
+		return nil, err
+	}
 
 	// HAVING conditions
-	f.collectParams(spec.Having, seen, &params)
+	if err := f.collectParams(spec.Having, seen, &params, 1); err != nil {
+		return nil, err
+	}
 
 	// HAVING aggregate conditions
 	for _, h := range spec.HavingAgg {
@@ -453,35 +705,48 @@ func (f *Factory[T]) deriveSelectParams(spec SelectSpec) []ParamSpec {
 		}
 	}
 
-	return params
+	return params, nil
 }
 
+// ErrMaxDepthExceeded is returned when condition nesting exceeds the configured maximum.
+var ErrMaxDepthExceeded = fmt.Errorf("maximum condition depth exceeded")
+
 // collectParams recursively collects params from conditions, including nested groups.
-func (f *Factory[T]) collectParams(conditions []ConditionSpec, seen map[string]bool, params *[]ParamSpec) {
-	for _, cond := range conditions {
+// Returns ErrMaxDepthExceeded if nesting depth exceeds maxConditionDepth.
+func (f *Factory[T]) collectParams(conditions []ConditionSpec, seen map[string]bool, params *[]ParamSpec, depth int) error {
+	// Check depth limit (0 or negative disables checking)
+	if f.maxConditionDepth > 0 && depth > f.maxConditionDepth {
+		return fmt.Errorf("%w: depth %d exceeds maximum %d", ErrMaxDepthExceeded, depth, f.maxConditionDepth)
+	}
+
+	for i := range conditions {
 		// Handle condition groups (AND/OR)
-		if cond.IsGroup() {
-			f.collectParams(cond.Group, seen, params)
+		if conditions[i].IsGroup() {
+			if err := f.collectParams(conditions[i].Group, seen, params, depth+1); err != nil {
+				return err
+			}
 			continue
 		}
 
 		// Simple condition
-		if cond.Param == "" || seen[cond.Param] {
+		if conditions[i].Param == "" || seen[conditions[i].Param] {
 			continue
 		}
-		seen[cond.Param] = true
+		seen[conditions[i].Param] = true
 
 		*params = append(*params, ParamSpec{
-			Name:     cond.Param,
-			Type:     f.fieldType(cond.Field),
+			Name:     conditions[i].Param,
+			Type:     f.fieldType(conditions[i].Field),
 			Required: true,
 		})
 	}
+	return nil
 }
 
 // deriveUpdateParams extracts params from both SET and WHERE clauses.
 // Handles nested condition groups (AND/OR) recursively.
-func (f *Factory[T]) deriveUpdateParams(spec UpdateSpec) []ParamSpec {
+// Returns ErrMaxDepthExceeded if nesting depth exceeds the configured maximum.
+func (f *Factory[T]) deriveUpdateParams(spec UpdateSpec) ([]ParamSpec, error) {
 	seen := make(map[string]bool)
 	params := make([]ParamSpec, 0)
 
@@ -500,9 +765,11 @@ func (f *Factory[T]) deriveUpdateParams(spec UpdateSpec) []ParamSpec {
 	}
 
 	// WHERE params (including nested groups)
-	f.collectParams(spec.Where, seen, &params)
+	if err := f.collectParams(spec.Where, seen, &params, 1); err != nil {
+		return nil, err
+	}
 
-	return params
+	return params, nil
 }
 
 // RemoveQuery removes a query capability by name.
@@ -512,6 +779,7 @@ func (f *Factory[T]) RemoveQuery(name string) bool {
 
 	if _, exists := f.queries[name]; exists {
 		delete(f.queries, name)
+		delete(f.sqlCache, "query:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
 			KeyTable.Field(f.cereal.TableName()),
 			KeyCapability.Field(name),
@@ -528,6 +796,7 @@ func (f *Factory[T]) RemoveSelect(name string) bool {
 
 	if _, exists := f.selects[name]; exists {
 		delete(f.selects, name)
+		delete(f.sqlCache, "select:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
 			KeyTable.Field(f.cereal.TableName()),
 			KeyCapability.Field(name),
@@ -544,6 +813,7 @@ func (f *Factory[T]) RemoveUpdate(name string) bool {
 
 	if _, exists := f.updates[name]; exists {
 		delete(f.updates, name)
+		delete(f.sqlCache, "update:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
 			KeyTable.Field(f.cereal.TableName()),
 			KeyCapability.Field(name),
@@ -560,6 +830,7 @@ func (f *Factory[T]) RemoveDelete(name string) bool {
 
 	if _, exists := f.deletes[name]; exists {
 		delete(f.deletes, name)
+		delete(f.sqlCache, "delete:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
 			KeyTable.Field(f.cereal.TableName()),
 			KeyCapability.Field(name),
@@ -576,6 +847,7 @@ func (f *Factory[T]) RemoveAggregate(name string) bool {
 
 	if _, exists := f.aggregates[name]; exists {
 		delete(f.aggregates, name)
+		delete(f.sqlCache, "aggregate:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
 			KeyTable.Field(f.cereal.TableName()),
 			KeyCapability.Field(name),
@@ -629,40 +901,40 @@ func (f *Factory[T]) HasAggregate(name string) bool {
 func (f *Factory[T]) GetQuery(name string) (QueryCapability, bool) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	cap, exists := f.queries[name]
-	return cap, exists
+	c, exists := f.queries[name]
+	return c, exists
 }
 
 // GetSelect returns a select capability by name.
 func (f *Factory[T]) GetSelect(name string) (SelectCapability, bool) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	cap, exists := f.selects[name]
-	return cap, exists
+	c, exists := f.selects[name]
+	return c, exists
 }
 
 // GetUpdate returns an update capability by name.
 func (f *Factory[T]) GetUpdate(name string) (UpdateCapability, bool) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	cap, exists := f.updates[name]
-	return cap, exists
+	c, exists := f.updates[name]
+	return c, exists
 }
 
 // GetDelete returns a delete capability by name.
 func (f *Factory[T]) GetDelete(name string) (DeleteCapability, bool) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	cap, exists := f.deletes[name]
-	return cap, exists
+	c, exists := f.deletes[name]
+	return c, exists
 }
 
 // GetAggregate returns an aggregate capability by name.
 func (f *Factory[T]) GetAggregate(name string) (AggregateCapability, bool) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	cap, exists := f.aggregates[name]
-	return cap, exists
+	c, exists := f.aggregates[name]
+	return c, exists
 }
 
 // ListQueries returns all registered query capability names.
