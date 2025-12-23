@@ -1,6 +1,8 @@
 module github.com/zoobzio/edamame
 
-go 1.24.5
+go 1.24.0
+
+toolchain go1.25.5
 
 require (
 	github.com/jmoiron/sqlx v1.4.0

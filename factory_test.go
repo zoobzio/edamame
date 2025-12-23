@@ -1004,3 +1004,410 @@ func TestCache_InvalidatedOnRemove(t *testing.T) {
 		t.Error("RenderQuery() should fail after capability was removed")
 	}
 }
+
+// -----------------------------------------------------------------------------
+// Remove Method Tests
+// -----------------------------------------------------------------------------
+
+func TestRemoveSelect(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a custom select
+	err = factory.AddSelect(SelectCapability{
+		Name: "by-email",
+		Spec: SelectSpec{
+			Where: []ConditionSpec{{Field: "email", Operator: "=", Param: "email"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSelect() failed: %v", err)
+	}
+
+	if !factory.HasSelect("by-email") {
+		t.Fatal("by-email should exist before removal")
+	}
+
+	// Remove it
+	removed := factory.RemoveSelect("by-email")
+	if !removed {
+		t.Error("RemoveSelect() should return true for existing capability")
+	}
+
+	if factory.HasSelect("by-email") {
+		t.Error("by-email should not exist after removal")
+	}
+
+	// Removing again should return false
+	removed = factory.RemoveSelect("by-email")
+	if removed {
+		t.Error("RemoveSelect() should return false for non-existent capability")
+	}
+}
+
+func TestRemoveUpdate(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a custom update
+	err = factory.AddUpdate(UpdateCapability{
+		Name: "update-name",
+		Spec: UpdateSpec{
+			Set:   map[string]string{"name": "new_name"},
+			Where: []ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddUpdate() failed: %v", err)
+	}
+
+	if !factory.HasUpdate("update-name") {
+		t.Fatal("update-name should exist before removal")
+	}
+
+	// Remove it
+	removed := factory.RemoveUpdate("update-name")
+	if !removed {
+		t.Error("RemoveUpdate() should return true for existing capability")
+	}
+
+	if factory.HasUpdate("update-name") {
+		t.Error("update-name should not exist after removal")
+	}
+
+	// Removing again should return false
+	removed = factory.RemoveUpdate("update-name")
+	if removed {
+		t.Error("RemoveUpdate() should return false for non-existent capability")
+	}
+}
+
+func TestRemoveDelete(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a custom delete
+	err = factory.AddDelete(DeleteCapability{
+		Name: "delete-by-email",
+		Spec: DeleteSpec{
+			Where: []ConditionSpec{{Field: "email", Operator: "=", Param: "email"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddDelete() failed: %v", err)
+	}
+
+	if !factory.HasDelete("delete-by-email") {
+		t.Fatal("delete-by-email should exist before removal")
+	}
+
+	// Remove it
+	removed := factory.RemoveDelete("delete-by-email")
+	if !removed {
+		t.Error("RemoveDelete() should return true for existing capability")
+	}
+
+	if factory.HasDelete("delete-by-email") {
+		t.Error("delete-by-email should not exist after removal")
+	}
+
+	// Removing again should return false
+	removed = factory.RemoveDelete("delete-by-email")
+	if removed {
+		t.Error("RemoveDelete() should return false for non-existent capability")
+	}
+}
+
+func TestRemoveAggregate(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a custom aggregate
+	err = factory.AddAggregate(AggregateCapability{
+		Name: "sum-age",
+		Func: AggSum,
+		Spec: AggregateSpec{Field: "age"},
+	})
+	if err != nil {
+		t.Fatalf("AddAggregate() failed: %v", err)
+	}
+
+	if !factory.HasAggregate("sum-age") {
+		t.Fatal("sum-age should exist before removal")
+	}
+
+	// Remove it
+	removed := factory.RemoveAggregate("sum-age")
+	if !removed {
+		t.Error("RemoveAggregate() should return true for existing capability")
+	}
+
+	if factory.HasAggregate("sum-age") {
+		t.Error("sum-age should not exist after removal")
+	}
+
+	// Removing again should return false
+	removed = factory.RemoveAggregate("sum-age")
+	if removed {
+		t.Error("RemoveAggregate() should return false for non-existent capability")
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Param Derivation Tests (HAVING, OrderBy)
+// -----------------------------------------------------------------------------
+
+func TestDeriveSelectParams_WithHaving(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a select with HAVING conditions
+	err = factory.AddSelect(SelectCapability{
+		Name: "with-having",
+		Spec: SelectSpec{
+			Fields:  []string{"name"},
+			GroupBy: []string{"name"},
+			Having: []ConditionSpec{
+				{Field: "age", Operator: ">", Param: "min_age"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSelect() failed: %v", err)
+	}
+
+	capability, ok := factory.GetSelect("with-having")
+	if !ok {
+		t.Fatal("GetSelect('with-having') returned false")
+	}
+
+	// Should have the HAVING param derived
+	found := false
+	for _, p := range capability.Params {
+		if p.Name == "min_age" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("min_age param should be derived from HAVING condition")
+	}
+}
+
+func TestDeriveSelectParams_WithHavingAgg(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a select with HavingAgg conditions
+	err = factory.AddSelect(SelectCapability{
+		Name: "with-having-agg",
+		Spec: SelectSpec{
+			Fields:  []string{"name"},
+			GroupBy: []string{"name"},
+			HavingAgg: []HavingAggSpec{
+				{Func: "count", Operator: ">", Param: "min_count"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSelect() failed: %v", err)
+	}
+
+	capability, ok := factory.GetSelect("with-having-agg")
+	if !ok {
+		t.Fatal("GetSelect('with-having-agg') returned false")
+	}
+
+	// Should have the HavingAgg param derived
+	found := false
+	for _, p := range capability.Params {
+		if p.Name == "min_count" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("min_count param should be derived from HavingAgg condition")
+	}
+}
+
+func TestDeriveSelectParams_WithNestedHaving(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a select with nested HAVING conditions
+	err = factory.AddSelect(SelectCapability{
+		Name: "with-nested-having",
+		Spec: SelectSpec{
+			Fields:  []string{"name"},
+			GroupBy: []string{"name"},
+			Having: []ConditionSpec{
+				{
+					Logic: "OR",
+					Group: []ConditionSpec{
+						{Field: "age", Operator: ">", Param: "min_age"},
+						{Field: "age", Operator: "<", Param: "max_age"},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSelect() failed: %v", err)
+	}
+
+	capability, ok := factory.GetSelect("with-nested-having")
+	if !ok {
+		t.Fatal("GetSelect('with-nested-having') returned false")
+	}
+
+	// Should have both HAVING params derived
+	paramNames := make(map[string]bool)
+	for _, p := range capability.Params {
+		paramNames[p.Name] = true
+	}
+
+	if !paramNames["min_age"] {
+		t.Error("min_age param should be derived from nested HAVING condition")
+	}
+	if !paramNames["max_age"] {
+		t.Error("max_age param should be derived from nested HAVING condition")
+	}
+}
+
+func TestDeriveQueryParams_WithOrderByExpression(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a query with ORDER BY expression (vector distance style)
+	err = factory.AddQuery(QueryCapability{
+		Name: "with-order-expr",
+		Spec: QuerySpec{
+			Fields: []string{"id", "name"},
+			OrderBy: []OrderBySpec{
+				{Field: "name", Operator: "<->", Param: "search_vec", Direction: "asc"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddQuery() failed: %v", err)
+	}
+
+	capability, ok := factory.GetQuery("with-order-expr")
+	if !ok {
+		t.Fatal("GetQuery('with-order-expr') returned false")
+	}
+
+	// Should have the ORDER BY param derived
+	found := false
+	for _, p := range capability.Params {
+		if p.Name == "search_vec" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("search_vec param should be derived from ORDER BY expression")
+	}
+}
+
+func TestDeriveSelectParams_Combined(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Add a select with WHERE, HAVING, and HavingAgg
+	err = factory.AddSelect(SelectCapability{
+		Name: "combined-params",
+		Spec: SelectSpec{
+			Fields:  []string{"name"},
+			GroupBy: []string{"name"},
+			Where: []ConditionSpec{
+				{Field: "age", Operator: ">", Param: "where_age"},
+			},
+			Having: []ConditionSpec{
+				{Field: "name", Operator: "LIKE", Param: "having_name"},
+			},
+			HavingAgg: []HavingAggSpec{
+				{Func: "count", Operator: ">=", Param: "having_count"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSelect() failed: %v", err)
+	}
+
+	capability, ok := factory.GetSelect("combined-params")
+	if !ok {
+		t.Fatal("GetSelect('combined-params') returned false")
+	}
+
+	// Should have all params derived
+	paramNames := make(map[string]bool)
+	for _, p := range capability.Params {
+		paramNames[p.Name] = true
+	}
+
+	expected := []string{"where_age", "having_name", "having_count"}
+	for _, name := range expected {
+		if !paramNames[name] {
+			t.Errorf("%s param should be derived", name)
+		}
+	}
+}
+
+func TestDeriveSelectParams_DepthExceededInHaving(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	factory.SetMaxConditionDepth(1)
+
+	// Add a select with deeply nested HAVING conditions
+	err = factory.AddSelect(SelectCapability{
+		Name: "deep-having",
+		Spec: SelectSpec{
+			Fields:  []string{"name"},
+			GroupBy: []string{"name"},
+			Having: []ConditionSpec{
+				{
+					Logic: "AND",
+					Group: []ConditionSpec{
+						{
+							Logic: "OR",
+							Group: []ConditionSpec{
+								{Field: "age", Operator: ">", Param: "min_age"},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+
+	if err == nil {
+		t.Error("AddSelect() should fail when HAVING condition depth exceeds maximum")
+	}
+
+	if !strings.Contains(err.Error(), "maximum condition depth exceeded") {
+		t.Errorf("error should mention 'maximum condition depth exceeded', got: %v", err)
+	}
+}
