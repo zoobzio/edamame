@@ -9,67 +9,34 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/zoobzio/edamame)](go.mod)
 [![Release](https://img.shields.io/github/v/release/zoobzio/edamame)](https://github.com/zoobzio/edamame/releases)
 
-Capability-driven query factories for Go with JSON-serializable specs and LLM integration.
+Runtime query factory for Go.
 
-## The Problem
+Define database queries as data, register them at runtime, reconfigure without rebuilding.
 
-Database access in Go typically means scattered query logic or monolithic ORMs:
+## Queries as Data
 
-```go
-// Scattered: SQL strings everywhere, no discoverability
-rows, _ := db.Query("SELECT * FROM users WHERE age >= $1 ORDER BY name", minAge)
-
-// ORM: Magic methods, hard to introspect, no safe way to expose to LLMs
-db.Where("age >= ?", minAge).Order("name").Find(&users)
-```
-
-When you need to expose query capabilities to an LLM or API consumer, there's no structured way to describe what operations are available, what parameters they accept, or how to validate inputs.
-
-## The Solution
-
-Edamame registers queries as named capabilities with JSON-serializable specs:
+Edamame treats queries as specs—pure data structures you can create, store, and swap at runtime.
 
 ```go
-import "github.com/zoobzio/astql/pkg/postgres"
+// A query is just data
+spec := edamame.QuerySpec{
+    Where:   []edamame.ConditionSpec{{Field: "status", Operator: "=", Param: "status"}},
+    OrderBy: []edamame.OrderBySpec{{Field: "created_at", Direction: "desc"}},
+    Limit:   ptr(50),
+}
 
-factory, _ := edamame.New[User](db, "users", postgres.New())
-
-// Register a capability
-factory.AddQuery(edamame.QueryCapability{
-    Name:        "adults",
-    Description: "Find users 18 and older",
-    Spec: edamame.QuerySpec{
-        Where:   []edamame.ConditionSpec{{Field: "age", Operator: ">=", Param: "min_age"}},
-        OrderBy: []edamame.OrderBySpec{{Field: "name", Direction: "asc"}},
-    },
-})
+// Register it
+factory.AddQuery(edamame.QueryCapability{Name: "by-status", Spec: spec})
 
 // Execute by name
-users, _ := factory.ExecQuery(ctx, "adults", map[string]any{"min_age": 18})
+users, _ := factory.ExecQuery(ctx, "by-status", map[string]any{"status": "active"})
 
-// Export for LLMs
-json, _ := factory.SpecJSON()
+// Later: hot-swap without rebuild
+factory.RemoveQuery("by-status")
+factory.AddQuery(edamame.QueryCapability{Name: "by-status", Spec: optimizedSpec})
 ```
 
-You get:
-
-- **Named capabilities** — queries registered once, executed by name
-- **JSON specs** — export what's available, with params and types
-- **LLM-safe execution** — AI picks capability + params, you validate and execute
-- **Type-safe results** — queries return `*User` or `[]*User`, not `interface{}`
-
-## Features
-
-- **Declarative** — define what, not how. Specs are pure data.
-- **Type-safe** — generic factories with compile-time safety via [cereal](https://github.com/zoobzio/cereal)
-- **Introspectable** — export specs as JSON for documentation or LLMs
-- **Parameterized** — all queries use sqlx named params, no injection
-- **Multi-operation** — queries, selects, updates, deletes, aggregates, compounds
-- **Testable** — test capability registration without a database
-
-## Use Cases
-
-- [Integrate with LLMs](docs/4.cookbook/1.llm-integration.md) — expose capabilities to AI assistants safely
+No code generation. No rebuild. Change queries in production.
 
 ## Install
 
@@ -77,7 +44,7 @@ You get:
 go get github.com/zoobzio/edamame
 ```
 
-Requires Go 1.24+ and PostgreSQL.
+Requires Go 1.24+. Supports PostgreSQL, MySQL, SQLite, and SQL Server via [astql](https://github.com/zoobzio/astql).
 
 ## Quick Start
 
@@ -87,145 +54,101 @@ package main
 import (
     "context"
     "fmt"
+
     "github.com/jmoiron/sqlx"
-    "github.com/zoobzio/astql/pkg/postgres"
+    _ "github.com/lib/pq" // or mysql, sqlite3, mssql driver
+    "github.com/zoobzio/astql/pkg/postgres" // or mysql, sqlite, mssql
     "github.com/zoobzio/edamame"
-    _ "github.com/lib/pq"
 )
 
 type User struct {
-    ID    int    `db:"id" type:"integer" constraints:"primarykey"`
-    Email string `db:"email" type:"text" constraints:"notnull,unique"`
-    Name  string `db:"name" type:"text"`
-    Age   *int   `db:"age" type:"integer"`
+    ID     int    `db:"id" type:"integer" constraints:"primarykey"`
+    Email  string `db:"email" type:"text" constraints:"notnull,unique"`
+    Name   string `db:"name" type:"text"`
+    Status string `db:"status" type:"text"`
 }
 
 func main() {
     db, _ := sqlx.Connect("postgres", "postgres://localhost/mydb?sslmode=disable")
+    ctx := context.Background()
 
-    // Create factory with default capabilities
+    // Create factory (auto-registers select, query, delete, count)
     factory, _ := edamame.New[User](db, "users", postgres.New())
+
+    // Use built-in capabilities
+    users, _ := factory.ExecQuery(ctx, "query", nil)
+    user, _ := factory.ExecSelect(ctx, "select", map[string]any{"id": 1})
+    count, _ := factory.ExecAggregate(ctx, "count", nil)
 
     // Add custom capability
     factory.AddQuery(edamame.QueryCapability{
-        Name:        "adults",
-        Description: "Find users 18 and older",
+        Name: "active",
         Spec: edamame.QuerySpec{
             Where: []edamame.ConditionSpec{
-                {Field: "age", Operator: ">=", Param: "min_age"},
-            },
-            OrderBy: []edamame.OrderBySpec{
-                {Field: "name", Direction: "asc"},
+                {Field: "status", Operator: "=", Param: "status"},
             },
         },
     })
 
-    // Execute
-    ctx := context.Background()
-    users, _ := factory.ExecQuery(ctx, "adults", map[string]any{"min_age": 18})
-
-    for _, u := range users {
-        fmt.Printf("%s (%d)\n", u.Name, *u.Age)
-    }
+    active, _ := factory.ExecQuery(ctx, "active", map[string]any{"status": "active"})
+    fmt.Printf("%d users, %d active\n", len(users), len(active))
 }
 ```
 
-## API Reference
+## Runtime Reconfiguration
 
-| Function | Purpose |
-|----------|---------|
-| `New[T](db, table, renderer)` | Create factory for type T |
-| `AddQuery(cap)` | Register query capability |
-| `AddSelect(cap)` | Register single-record select |
-| `AddUpdate(cap)` | Register update capability |
-| `AddDelete(cap)` | Register delete capability |
-| `AddAggregate(cap)` | Register aggregate (count, sum, avg, min, max) |
-| `ExecQuery(ctx, name, params)` | Execute query, return `[]*T` |
-| `ExecSelect(ctx, name, params)` | Execute select, return `*T` |
-| `ExecUpdate(ctx, name, params)` | Execute update, return `*T` |
-| `ExecDelete(ctx, name, params)` | Execute delete, return count |
-| `ExecAggregate(ctx, name, params)` | Execute aggregate, return value |
-| `ExecInsert(ctx, record)` | Insert record, return `*T` |
-| `Spec()` | Get all capabilities as struct |
-| `SpecJSON()` | Get all capabilities as JSON |
-
-See [API Reference](docs/5.reference/1.api.md) for complete documentation.
-
-## Default Capabilities
-
-Every factory includes these out of the box:
-
-| Name | Type | Description |
-|------|------|-------------|
-| `query` | Query | Select all records |
-| `select` | Select | Select by primary key |
-| `delete` | Delete | Delete by primary key |
-| `count` | Aggregate | Count all records |
+The real value: modify query behavior without touching code.
 
 ```go
-// Use defaults immediately
-users, _ := factory.ExecQuery(ctx, "query", nil)
-user, _ := factory.ExecSelect(ctx, "select", map[string]any{"id": 123})
-count, _ := factory.ExecAggregate(ctx, "count", nil)
-```
+// Load specs from config, database, or remote source
+specs := loadQuerySpecs("queries.json")
 
-## Introspection
+for _, s := range specs {
+    factory.AddQuery(s)
+}
 
-Export capabilities for LLMs or API documentation:
+// Query running slow? Swap it out
+factory.RemoveQuery("expensive-query")
+factory.AddQuery(optimizedVersion)
 
-```go
-spec := factory.Spec()
-// spec.Table: "users"
-// spec.Queries: [{Name: "adults", Params: [{Name: "min_age", Type: "integer", Required: true}]}]
-
+// Export what's available
 json, _ := factory.SpecJSON()
 ```
 
-```json
-{
-  "table": "users",
-  "queries": [
-    {
-      "name": "adults",
-      "description": "Find users 18 and older",
-      "params": [
-        {"name": "min_age", "type": "integer", "required": true}
-      ]
-    }
-  ]
-}
-```
+Specs are JSON-serializable. Store them anywhere. Load them anytime.
 
-The LLM picks capabilities and params—your code validates and executes.
+## Why edamame?
+
+- **No build cycle** — define and modify queries at runtime
+- **Hot reconfiguration** — swap underperforming queries in production
+- **Specs are data** — JSON-serializable, storable, versionable
+- **Type-safe** — generic `Factory[T]` with compile-time safety via [cereal](https://github.com/zoobzio/cereal)
+- **Named capabilities** — queries registered once, executed by name
+- **Thread-safe** — concurrent reads, serialized writes
 
 ## Documentation
 
-- [Overview](docs/1.overview.md) — what edamame does and why
-
 ### Learn
-- [Quickstart](docs/2.learn/1.quickstart.md) — get started in minutes
-- [Core Concepts](docs/2.learn/2.concepts.md) — factories, capabilities, specs
-- [Architecture](docs/2.learn/3.architecture.md) — how edamame works with cereal
+- [Quickstart](docs/2.learn/1.quickstart.md)
+- [Core Concepts](docs/2.learn/2.concepts.md)
+- [Architecture](docs/2.learn/3.architecture.md)
 
 ### Guides
-- [Capabilities](docs/3.guides/1.capabilities.md) — adding custom queries, updates, deletes
-- [Testing](docs/3.guides/2.testing.md) — unit tests, integration tests, benchmarks
-
-### Cookbook
-- [LLM Integration](docs/4.cookbook/1.llm-integration.md) — using specs with AI assistants
+- [Capabilities](docs/3.guides/1.capabilities.md)
+- [Testing](docs/3.guides/2.testing.md)
 
 ### Reference
-- [API Reference](docs/5.reference/1.api.md) — complete function and type documentation
+- [API Reference](docs/5.reference/1.api.md)
 
 ## Contributing
 
-Contributions welcome! Please ensure:
-- Tests pass: `make test`
-- Code is formatted: `go fmt ./...`
-- No lint errors: `make lint`
+```bash
+make test
+make lint
+```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT

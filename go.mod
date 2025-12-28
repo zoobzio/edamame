@@ -8,9 +8,9 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 	github.com/testcontainers/testcontainers-go v0.40.0
-	github.com/zoobzio/astql v0.0.19
-	github.com/zoobzio/capitan v0.0.8
-	github.com/zoobzio/cereal v0.0.6
+	github.com/zoobzio/astql v0.1.0
+	github.com/zoobzio/capitan v0.1.0
+	github.com/zoobzio/cereal v0.0.8
 )
 
 require (
@@ -57,8 +57,8 @@ require (
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	github.com/zoobzio/dbml v0.0.3 // indirect
-	github.com/zoobzio/sentinel v0.1.0 // indirect
+	github.com/zoobzio/dbml v0.1.0 // indirect
+	github.com/zoobzio/sentinel v0.1.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
 	go.opentelemetry.io/otel v1.39.0 // indirect
@@ -69,5 +69,6 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	golang.org/x/crypto v0.43.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
