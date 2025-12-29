@@ -1,6 +1,6 @@
-// Package edamame provides a capability-driven query factory built on cereal.
+// Package edamame provides a capability-driven query factory built on soy.
 //
-// Edamame wraps cereal to offer a declarative, introspectable API for database
+// Edamame wraps soy to offer a declarative, introspectable API for database
 // operations. It automatically registers CRUD capabilities and allows custom
 // query patterns to be defined and discovered at runtime.
 //
@@ -74,17 +74,17 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/zoobzio/astql"
 	"github.com/zoobzio/capitan"
-	"github.com/zoobzio/cereal"
+	"github.com/zoobzio/soy"
 )
 
 // DefaultMaxConditionDepth is the default maximum nesting depth for condition groups.
 const DefaultMaxConditionDepth = 10
 
 // Factory provides a capability-driven query API for a specific model type.
-// It wraps cereal with named, introspectable query capabilities.
+// It wraps soy with named, introspectable query capabilities.
 type Factory[T any] struct {
 	db         *sqlx.DB
-	cereal     *cereal.Cereal[T]
+	soy        *soy.Soy[T]
 	primaryKey string
 
 	queries    map[string]QueryCapability
@@ -105,14 +105,14 @@ type Factory[T any] struct {
 // New creates a new Factory for type T with the given database connection, table name, and renderer.
 // CRUD capabilities are registered automatically based on struct metadata.
 func New[T any](db *sqlx.DB, tableName string, renderer astql.Renderer) (*Factory[T], error) {
-	c, err := cereal.New[T](db, tableName, renderer)
+	c, err := soy.New[T](db, tableName, renderer)
 	if err != nil {
-		return nil, fmt.Errorf("edamame: failed to create cereal instance: %w", err)
+		return nil, fmt.Errorf("edamame: failed to create soy instance: %w", err)
 	}
 
 	f := &Factory[T]{
 		db:                db,
-		cereal:            c,
+		soy:               c,
 		queries:           make(map[string]QueryCapability),
 		selects:           make(map[string]SelectCapability),
 		updates:           make(map[string]UpdateCapability),
@@ -138,9 +138,9 @@ func New[T any](db *sqlx.DB, tableName string, renderer astql.Renderer) (*Factor
 	return f, nil
 }
 
-// Cereal returns the underlying cereal instance for advanced usage.
-func (f *Factory[T]) Cereal() *cereal.Cereal[T] {
-	return f.cereal
+// Soy returns the underlying soy instance for advanced usage.
+func (f *Factory[T]) Soy() *soy.Soy[T] {
+	return f.soy
 }
 
 // RenderQuery renders a query capability to SQL for inspection or debugging.
@@ -368,7 +368,7 @@ func (f *Factory[T]) PrepareAggregate(ctx context.Context, name string) (*sqlx.S
 
 // TableName returns the table name for this factory.
 func (f *Factory[T]) TableName() string {
-	return f.cereal.TableName()
+	return f.soy.TableName()
 }
 
 // SetMaxConditionDepth sets the maximum nesting depth for condition groups.
@@ -389,14 +389,14 @@ func (f *Factory[T]) MaxConditionDepth() int {
 // findPrimaryKey extracts the primary key field from struct metadata.
 // Returns an error if no primary key constraint is found.
 func (f *Factory[T]) findPrimaryKey() (string, error) {
-	meta := f.cereal.Metadata()
+	meta := f.soy.Metadata()
 	for _, field := range meta.Fields {
 		constraints := strings.ToLower(field.Tags["constraints"])
 		if strings.Contains(constraints, "primarykey") || strings.Contains(constraints, "primary_key") {
 			return field.Tags["db"], nil
 		}
 	}
-	return "", fmt.Errorf("no primary key constraint found for table %q: add `constraints:\"primarykey\"` to your struct", f.cereal.TableName())
+	return "", fmt.Errorf("no primary key constraint found for table %q: add `constraints:\"primarykey\"` to your struct", f.soy.TableName())
 }
 
 // registerDefaults sets up the standard CRUD capabilities.
@@ -407,7 +407,7 @@ func (f *Factory[T]) registerDefaults() {
 	// SELECT by primary key (single record)
 	f.selects["select"] = SelectCapability{
 		Name:        "select",
-		Description: fmt.Sprintf("Select a single %s by primary key", f.cereal.TableName()),
+		Description: fmt.Sprintf("Select a single %s by primary key", f.soy.TableName()),
 		Spec: SelectSpec{
 			Where: []ConditionSpec{
 				{Field: pk, Operator: "=", Param: pk},
@@ -422,7 +422,7 @@ func (f *Factory[T]) registerDefaults() {
 	// QUERY all records (multiple)
 	f.queries["query"] = QueryCapability{
 		Name:        "query",
-		Description: fmt.Sprintf("Query all %s records", f.cereal.TableName()),
+		Description: fmt.Sprintf("Query all %s records", f.soy.TableName()),
 		Spec:        QuerySpec{},
 		Params:      []ParamSpec{},
 		Tags:        []string{"crud", "read"},
@@ -431,7 +431,7 @@ func (f *Factory[T]) registerDefaults() {
 	// DELETE by primary key
 	f.deletes["delete"] = DeleteCapability{
 		Name:        "delete",
-		Description: fmt.Sprintf("Delete a %s by primary key", f.cereal.TableName()),
+		Description: fmt.Sprintf("Delete a %s by primary key", f.soy.TableName()),
 		Spec: DeleteSpec{
 			Where: []ConditionSpec{
 				{Field: pk, Operator: "=", Param: pk},
@@ -446,7 +446,7 @@ func (f *Factory[T]) registerDefaults() {
 	// COUNT all records
 	f.aggregates["count"] = AggregateCapability{
 		Name:        "count",
-		Description: fmt.Sprintf("Count all %s records", f.cereal.TableName()),
+		Description: fmt.Sprintf("Count all %s records", f.soy.TableName()),
 		Spec:        AggregateSpec{},
 		Func:        AggCount,
 		Params:      []ParamSpec{},
@@ -456,7 +456,7 @@ func (f *Factory[T]) registerDefaults() {
 
 // fieldType returns the type string for a field from metadata.
 func (f *Factory[T]) fieldType(fieldName string) string {
-	meta := f.cereal.Metadata()
+	meta := f.soy.Metadata()
 	for _, field := range meta.Fields {
 		if field.Tags["db"] == fieldName {
 			if t := field.Tags["type"]; t != "" {
@@ -489,7 +489,7 @@ func (f *Factory[T]) AddQuery(c QueryCapability) error {
 	f.queries[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
-		KeyTable.Field(f.cereal.TableName()),
+		KeyTable.Field(f.soy.TableName()),
 		KeyCapability.Field(c.Name),
 		KeyType.Field("query"))
 
@@ -516,7 +516,7 @@ func (f *Factory[T]) AddSelect(c SelectCapability) error {
 	f.selects[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
-		KeyTable.Field(f.cereal.TableName()),
+		KeyTable.Field(f.soy.TableName()),
 		KeyCapability.Field(c.Name),
 		KeyType.Field("select"))
 
@@ -543,7 +543,7 @@ func (f *Factory[T]) AddUpdate(c UpdateCapability) error {
 	f.updates[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
-		KeyTable.Field(f.cereal.TableName()),
+		KeyTable.Field(f.soy.TableName()),
 		KeyCapability.Field(c.Name),
 		KeyType.Field("update"))
 
@@ -570,7 +570,7 @@ func (f *Factory[T]) AddDelete(c DeleteCapability) error {
 	f.deletes[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
-		KeyTable.Field(f.cereal.TableName()),
+		KeyTable.Field(f.soy.TableName()),
 		KeyCapability.Field(c.Name),
 		KeyType.Field("delete"))
 
@@ -597,7 +597,7 @@ func (f *Factory[T]) AddAggregate(c AggregateCapability) error {
 	f.aggregates[c.Name] = c
 
 	capitan.Emit(context.Background(), CapabilityAdded,
-		KeyTable.Field(f.cereal.TableName()),
+		KeyTable.Field(f.soy.TableName()),
 		KeyCapability.Field(c.Name),
 		KeyType.Field("aggregate"))
 
@@ -781,7 +781,7 @@ func (f *Factory[T]) RemoveQuery(name string) bool {
 		delete(f.queries, name)
 		delete(f.sqlCache, "query:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("query"))
 		return true
@@ -798,7 +798,7 @@ func (f *Factory[T]) RemoveSelect(name string) bool {
 		delete(f.selects, name)
 		delete(f.sqlCache, "select:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("select"))
 		return true
@@ -815,7 +815,7 @@ func (f *Factory[T]) RemoveUpdate(name string) bool {
 		delete(f.updates, name)
 		delete(f.sqlCache, "update:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("update"))
 		return true
@@ -832,7 +832,7 @@ func (f *Factory[T]) RemoveDelete(name string) bool {
 		delete(f.deletes, name)
 		delete(f.sqlCache, "delete:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("delete"))
 		return true
@@ -849,7 +849,7 @@ func (f *Factory[T]) RemoveAggregate(name string) bool {
 		delete(f.aggregates, name)
 		delete(f.sqlCache, "aggregate:"+name)
 		capitan.Emit(context.Background(), CapabilityRemoved,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("aggregate"))
 		return true

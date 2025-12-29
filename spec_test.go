@@ -471,19 +471,19 @@ func TestParamDerivationCombined(t *testing.T) {
 	}
 }
 
-func TestCerealAccessor(t *testing.T) {
+func TestSoyAccessor(t *testing.T) {
 	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	c := factory.Cereal()
+	c := factory.Soy()
 	if c == nil {
-		t.Fatal("Cereal() returned nil")
+		t.Fatal("Soy() returned nil")
 	}
 
 	if c.TableName() != "users" {
-		t.Errorf("Cereal().TableName() = %q, want %q", c.TableName(), "users")
+		t.Errorf("Soy().TableName() = %q, want %q", c.TableName(), "users")
 	}
 }
 

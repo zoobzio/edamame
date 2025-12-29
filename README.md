@@ -122,7 +122,7 @@ Specs are JSON-serializable. Store them anywhere. Load them anytime.
 - **No build cycle** — define and modify queries at runtime
 - **Hot reconfiguration** — swap underperforming queries in production
 - **Specs are data** — JSON-serializable, storable, versionable
-- **Type-safe** — generic `Factory[T]` with compile-time safety via [cereal](https://github.com/zoobzio/cereal)
+- **Type-safe** — generic `Factory[T]` with compile-time safety via [soy](https://github.com/zoobzio/soy)
 - **Named capabilities** — queries registered once, executed by name
 - **Thread-safe** — concurrent reads, serialized writes
 

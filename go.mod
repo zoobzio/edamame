@@ -10,7 +10,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/zoobzio/astql v0.1.0
 	github.com/zoobzio/capitan v0.1.0
-	github.com/zoobzio/cereal v0.0.8
+	github.com/zoobzio/soy v0.0.9
 )
 
 require (

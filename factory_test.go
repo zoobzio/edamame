@@ -26,8 +26,8 @@ func TestNew(t *testing.T) {
 		t.Errorf("TableName() = %q, want %q", factory.TableName(), "users")
 	}
 
-	if factory.Cereal() == nil {
-		t.Error("Cereal() returned nil")
+	if factory.Soy() == nil {
+		t.Error("Soy() returned nil")
 	}
 }
 

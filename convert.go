@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zoobzio/cereal"
+	"github.com/zoobzio/soy"
 )
 
 // Constants for conflict actions and row locking modes.
@@ -21,21 +21,21 @@ const (
 	selectExprCount       = "count"
 )
 
-// toCondition converts a simple ConditionSpec to a cereal.Condition.
-func (c ConditionSpec) toCondition() cereal.Condition {
+// toCondition converts a simple ConditionSpec to a soy.Condition.
+func (c ConditionSpec) toCondition() soy.Condition {
 	if c.IsNull {
 		if c.Operator == opIsNotNull {
-			return cereal.NotNull(c.Field)
+			return soy.NotNull(c.Field)
 		}
-		return cereal.Null(c.Field)
+		return soy.Null(c.Field)
 	}
-	return cereal.C(c.Field, c.Operator, c.Param)
+	return soy.C(c.Field, c.Operator, c.Param)
 }
 
-// toConditions converts a slice of ConditionSpecs to cereal.Conditions.
+// toConditions converts a slice of ConditionSpecs to soy.Conditions.
 // This flattens simple conditions from groups for use with WhereAnd/WhereOr.
-func toConditions(specs []ConditionSpec) []cereal.Condition {
-	conditions := make([]cereal.Condition, 0, len(specs))
+func toConditions(specs []ConditionSpec) []soy.Condition {
+	conditions := make([]soy.Condition, 0, len(specs))
 	for i := range specs {
 		if !specs[i].IsGroup() {
 			conditions = append(conditions, specs[i].toCondition())
@@ -44,10 +44,10 @@ func toConditions(specs []ConditionSpec) []cereal.Condition {
 	return conditions
 }
 
-// queryFromSpec builds a cereal.Query from a QuerySpec.
+// queryFromSpec builds a soy.Query from a QuerySpec.
 // Returns an error if the spec contains invalid values.
-func (f *Factory[T]) queryFromSpec(spec QuerySpec) (*cereal.Query[T], error) {
-	q := f.cereal.Query()
+func (f *Factory[T]) queryFromSpec(spec QuerySpec) (*soy.Query[T], error) {
+	q := f.soy.Query()
 
 	// Add fields if specified
 	if len(spec.Fields) > 0 {
@@ -128,7 +128,7 @@ func (f *Factory[T]) queryFromSpec(spec QuerySpec) (*cereal.Query[T], error) {
 
 // applyConditionToQuery applies a ConditionSpec to a Query builder.
 // Handles simple conditions, condition groups (AND/OR), BETWEEN, and field comparisons.
-func applyConditionToQuery[T any](q *cereal.Query[T], cond ConditionSpec) *cereal.Query[T] {
+func applyConditionToQuery[T any](q *soy.Query[T], cond ConditionSpec) *soy.Query[T] {
 	if cond.IsGroup() {
 		conditions := toConditions(cond.Group)
 		if strings.EqualFold(cond.Logic, logicOR) {
@@ -165,7 +165,7 @@ func applyConditionToQuery[T any](q *cereal.Query[T], cond ConditionSpec) *cerea
 // applySelectExprToQuery applies a SelectExprSpec to a Query builder.
 // Handles string, math, date, aggregate, and conditional functions.
 // nolint:dupl // Intentionally similar to applySelectExprToSelect - they operate on different builder types without common interface.
-func applySelectExprToQuery[T any](q *cereal.Query[T], expr SelectExprSpec) *cereal.Query[T] {
+func applySelectExprToQuery[T any](q *soy.Query[T], expr SelectExprSpec) *soy.Query[T] {
 	switch strings.ToLower(expr.Func) {
 	// String functions
 	case "upper":
@@ -219,7 +219,7 @@ func applySelectExprToQuery[T any](q *cereal.Query[T], expr SelectExprSpec) *cer
 
 	// Type casting
 	case "cast":
-		return q.SelectCast(expr.Field, cereal.CastType(expr.CastType), expr.Alias)
+		return q.SelectCast(expr.Field, soy.CastType(expr.CastType), expr.Alias)
 
 	// Aggregate functions (inline in SELECT)
 	case "count_star":
@@ -270,7 +270,7 @@ func applySelectExprToQuery[T any](q *cereal.Query[T], expr SelectExprSpec) *cer
 
 // applyForLocking applies row locking to a Query based on the spec.
 // Returns an error if an invalid lock mode is specified.
-func applyForLocking[T any](q *cereal.Query[T], forLocking string) (*cereal.Query[T], error) {
+func applyForLocking[T any](q *soy.Query[T], forLocking string) (*soy.Query[T], error) {
 	if forLocking == "" {
 		return q, nil
 	}
@@ -288,10 +288,10 @@ func applyForLocking[T any](q *cereal.Query[T], forLocking string) (*cereal.Quer
 	}
 }
 
-// selectFromSpec builds a cereal.Select from a SelectSpec.
+// selectFromSpec builds a soy.Select from a SelectSpec.
 // Returns an error if the spec contains invalid values.
-func (f *Factory[T]) selectFromSpec(spec SelectSpec) (*cereal.Select[T], error) {
-	s := f.cereal.Select()
+func (f *Factory[T]) selectFromSpec(spec SelectSpec) (*soy.Select[T], error) {
+	s := f.soy.Select()
 
 	// Add fields if specified
 	if len(spec.Fields) > 0 {
@@ -372,7 +372,7 @@ func (f *Factory[T]) selectFromSpec(spec SelectSpec) (*cereal.Select[T], error) 
 
 // applyConditionToSelect applies a ConditionSpec to a Select builder.
 // Handles simple conditions, condition groups (AND/OR), BETWEEN, and field comparisons.
-func applyConditionToSelect[T any](s *cereal.Select[T], cond ConditionSpec) *cereal.Select[T] {
+func applyConditionToSelect[T any](s *soy.Select[T], cond ConditionSpec) *soy.Select[T] {
 	if cond.IsGroup() {
 		conditions := toConditions(cond.Group)
 		if strings.EqualFold(cond.Logic, logicOR) {
@@ -409,7 +409,7 @@ func applyConditionToSelect[T any](s *cereal.Select[T], cond ConditionSpec) *cer
 // applySelectExprToSelect applies a SelectExprSpec to a Select builder.
 // Handles string, math, date, aggregate, and conditional functions.
 // nolint:dupl // Intentionally similar to applySelectExprToQuery - they operate on different builder types without common interface.
-func applySelectExprToSelect[T any](s *cereal.Select[T], expr SelectExprSpec) *cereal.Select[T] {
+func applySelectExprToSelect[T any](s *soy.Select[T], expr SelectExprSpec) *soy.Select[T] {
 	switch strings.ToLower(expr.Func) {
 	// String functions
 	case "upper":
@@ -463,7 +463,7 @@ func applySelectExprToSelect[T any](s *cereal.Select[T], expr SelectExprSpec) *c
 
 	// Type casting
 	case "cast":
-		return s.SelectCast(expr.Field, cereal.CastType(expr.CastType), expr.Alias)
+		return s.SelectCast(expr.Field, soy.CastType(expr.CastType), expr.Alias)
 
 	// Aggregate functions (inline in SELECT)
 	case "count_star":
@@ -514,7 +514,7 @@ func applySelectExprToSelect[T any](s *cereal.Select[T], expr SelectExprSpec) *c
 
 // applyForLockingToSelect applies row locking to a Select based on the spec.
 // Returns an error if an invalid lock mode is specified.
-func applyForLockingToSelect[T any](s *cereal.Select[T], forLocking string) (*cereal.Select[T], error) {
+func applyForLockingToSelect[T any](s *soy.Select[T], forLocking string) (*soy.Select[T], error) {
 	if forLocking == "" {
 		return s, nil
 	}
@@ -532,9 +532,9 @@ func applyForLockingToSelect[T any](s *cereal.Select[T], forLocking string) (*ce
 	}
 }
 
-// modifyFromSpec builds a cereal.Update from an UpdateSpec.
-func (f *Factory[T]) modifyFromSpec(spec UpdateSpec) *cereal.Update[T] {
-	u := f.cereal.Modify()
+// modifyFromSpec builds a soy.Update from an UpdateSpec.
+func (f *Factory[T]) modifyFromSpec(spec UpdateSpec) *soy.Update[T] {
+	u := f.soy.Modify()
 
 	// Add SET clauses
 	for field, param := range spec.Set {
@@ -552,7 +552,7 @@ func (f *Factory[T]) modifyFromSpec(spec UpdateSpec) *cereal.Update[T] {
 // applyConditionToUpdate applies a ConditionSpec to an Update builder.
 // Handles simple conditions, condition groups (AND/OR), and BETWEEN.
 // Note: WhereFields is not supported for Update operations.
-func applyConditionToUpdate[T any](u *cereal.Update[T], cond ConditionSpec) *cereal.Update[T] {
+func applyConditionToUpdate[T any](u *soy.Update[T], cond ConditionSpec) *soy.Update[T] {
 	if cond.IsGroup() {
 		conditions := toConditions(cond.Group)
 		if strings.EqualFold(cond.Logic, logicOR) {
@@ -581,9 +581,9 @@ func applyConditionToUpdate[T any](u *cereal.Update[T], cond ConditionSpec) *cer
 	return u.Where(cond.Field, cond.Operator, cond.Param)
 }
 
-// removeFromSpec builds a cereal.Delete from a DeleteSpec.
-func (f *Factory[T]) removeFromSpec(spec DeleteSpec) *cereal.Delete[T] {
-	d := f.cereal.Remove()
+// removeFromSpec builds a soy.Delete from a DeleteSpec.
+func (f *Factory[T]) removeFromSpec(spec DeleteSpec) *soy.Delete[T] {
+	d := f.soy.Remove()
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -595,7 +595,7 @@ func (f *Factory[T]) removeFromSpec(spec DeleteSpec) *cereal.Delete[T] {
 
 // applyConditionToDelete applies a ConditionSpec to a Delete builder.
 // Handles simple conditions, condition groups (AND/OR), BETWEEN, and field comparisons.
-func applyConditionToDelete[T any](d *cereal.Delete[T], cond ConditionSpec) *cereal.Delete[T] {
+func applyConditionToDelete[T any](d *soy.Delete[T], cond ConditionSpec) *soy.Delete[T] {
 	if cond.IsGroup() {
 		conditions := toConditions(cond.Group)
 		if strings.EqualFold(cond.Logic, logicOR) {
@@ -629,9 +629,9 @@ func applyConditionToDelete[T any](d *cereal.Delete[T], cond ConditionSpec) *cer
 	return d.Where(cond.Field, cond.Operator, cond.Param)
 }
 
-// countFromSpec builds a cereal.Aggregate (COUNT) from an AggregateSpec.
-func (f *Factory[T]) countFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
-	agg := f.cereal.Count()
+// countFromSpec builds a soy.Aggregate (COUNT) from an AggregateSpec.
+func (f *Factory[T]) countFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := f.soy.Count()
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -641,9 +641,9 @@ func (f *Factory[T]) countFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
 	return agg
 }
 
-// sumFromSpec builds a cereal.Aggregate (SUM) from an AggregateSpec.
-func (f *Factory[T]) sumFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
-	agg := f.cereal.Sum(spec.Field)
+// sumFromSpec builds a soy.Aggregate (SUM) from an AggregateSpec.
+func (f *Factory[T]) sumFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := f.soy.Sum(spec.Field)
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -653,9 +653,9 @@ func (f *Factory[T]) sumFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
 	return agg
 }
 
-// avgFromSpec builds a cereal.Aggregate (AVG) from an AggregateSpec.
-func (f *Factory[T]) avgFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
-	agg := f.cereal.Avg(spec.Field)
+// avgFromSpec builds a soy.Aggregate (AVG) from an AggregateSpec.
+func (f *Factory[T]) avgFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := f.soy.Avg(spec.Field)
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -665,9 +665,9 @@ func (f *Factory[T]) avgFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
 	return agg
 }
 
-// minFromSpec builds a cereal.Aggregate (MIN) from an AggregateSpec.
-func (f *Factory[T]) minFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
-	agg := f.cereal.Min(spec.Field)
+// minFromSpec builds a soy.Aggregate (MIN) from an AggregateSpec.
+func (f *Factory[T]) minFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := f.soy.Min(spec.Field)
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -677,9 +677,9 @@ func (f *Factory[T]) minFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
 	return agg
 }
 
-// maxFromSpec builds a cereal.Aggregate (MAX) from an AggregateSpec.
-func (f *Factory[T]) maxFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
-	agg := f.cereal.Max(spec.Field)
+// maxFromSpec builds a soy.Aggregate (MAX) from an AggregateSpec.
+func (f *Factory[T]) maxFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := f.soy.Max(spec.Field)
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -691,7 +691,7 @@ func (f *Factory[T]) maxFromSpec(spec AggregateSpec) *cereal.Aggregate[T] {
 
 // applyConditionToAggregate applies a ConditionSpec to an Aggregate builder.
 // Handles simple conditions, condition groups (AND/OR), BETWEEN, and field comparisons.
-func applyConditionToAggregate[T any](agg *cereal.Aggregate[T], cond ConditionSpec) *cereal.Aggregate[T] {
+func applyConditionToAggregate[T any](agg *soy.Aggregate[T], cond ConditionSpec) *soy.Aggregate[T] {
 	if cond.IsGroup() {
 		conditions := toConditions(cond.Group)
 		if strings.EqualFold(cond.Logic, logicOR) {
@@ -725,10 +725,10 @@ func applyConditionToAggregate[T any](agg *cereal.Aggregate[T], cond ConditionSp
 	return agg.Where(cond.Field, cond.Operator, cond.Param)
 }
 
-// insertFromSpec builds a cereal.Create from a CreateSpec.
+// insertFromSpec builds a soy.Create from a CreateSpec.
 // Returns an error if an invalid conflict action is specified.
-func (f *Factory[T]) insertFromSpec(spec CreateSpec) (*cereal.Create[T], error) {
-	create := f.cereal.Insert()
+func (f *Factory[T]) insertFromSpec(spec CreateSpec) (*soy.Create[T], error) {
+	create := f.soy.Insert()
 
 	// If no conflict handling, return as-is
 	if len(spec.OnConflict) == 0 {
@@ -755,8 +755,8 @@ func (f *Factory[T]) insertFromSpec(spec CreateSpec) (*cereal.Create[T], error) 
 	}
 }
 
-// compoundFromSpec builds a cereal.Compound from a CompoundQuerySpec.
-func (f *Factory[T]) compoundFromSpec(spec CompoundQuerySpec) (*cereal.Compound[T], error) {
+// compoundFromSpec builds a soy.Compound from a CompoundQuerySpec.
+func (f *Factory[T]) compoundFromSpec(spec CompoundQuerySpec) (*soy.Compound[T], error) {
 	// Build base query
 	base, err := f.queryFromSpec(spec.Base)
 	if err != nil {
@@ -775,7 +775,7 @@ func (f *Factory[T]) compoundFromSpec(spec CompoundQuerySpec) (*cereal.Compound[
 		return nil, fmt.Errorf("operand 0: %w", err)
 	}
 
-	var compound *cereal.Compound[T]
+	var compound *soy.Compound[T]
 	switch strings.ToLower(firstOperand.Operation) {
 	case "union":
 		compound = base.Union(firstQuery)

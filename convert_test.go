@@ -28,7 +28,7 @@ func TestToCondition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Exercise the code path - cereal.Condition is opaque
+			// Exercise the code path - soy.Condition is opaque
 			// so we just verify it doesn't panic
 			_ = tt.spec.toCondition()
 		})

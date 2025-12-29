@@ -6,19 +6,19 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/zoobzio/capitan"
-	"github.com/zoobzio/cereal"
+	"github.com/zoobzio/soy"
 )
 
-// Query returns a cereal Query builder for the named capability.
+// Query returns a soy Query builder for the named capability.
 // Returns an error if the capability doesn't exist or has an invalid spec.
-func (f *Factory[T]) Query(name string) (*cereal.Query[T], error) {
+func (f *Factory[T]) Query(name string) (*soy.Query[T], error) {
 	f.mu.RLock()
 	queryCap, exists := f.queries[name]
 	f.mu.RUnlock()
 
 	if !exists {
 		capitan.Emit(context.Background(), CapabilityNotFound,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("query"))
 		return nil, fmt.Errorf("query capability %q not found", name)
@@ -31,16 +31,16 @@ func (f *Factory[T]) Query(name string) (*cereal.Query[T], error) {
 	return q, nil
 }
 
-// Select returns a cereal Select builder for the named capability.
+// Select returns a soy Select builder for the named capability.
 // Returns an error if the capability doesn't exist or has an invalid spec.
-func (f *Factory[T]) Select(name string) (*cereal.Select[T], error) {
+func (f *Factory[T]) Select(name string) (*soy.Select[T], error) {
 	f.mu.RLock()
 	selectCap, exists := f.selects[name]
 	f.mu.RUnlock()
 
 	if !exists {
 		capitan.Emit(context.Background(), CapabilityNotFound,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("select"))
 		return nil, fmt.Errorf("select capability %q not found", name)
@@ -53,16 +53,16 @@ func (f *Factory[T]) Select(name string) (*cereal.Select[T], error) {
 	return s, nil
 }
 
-// Update returns a cereal Update builder for the named capability.
+// Update returns a soy Update builder for the named capability.
 // Returns an error if the capability doesn't exist.
-func (f *Factory[T]) Update(name string) (*cereal.Update[T], error) {
+func (f *Factory[T]) Update(name string) (*soy.Update[T], error) {
 	f.mu.RLock()
 	updateCap, exists := f.updates[name]
 	f.mu.RUnlock()
 
 	if !exists {
 		capitan.Emit(context.Background(), CapabilityNotFound,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("update"))
 		return nil, fmt.Errorf("update capability %q not found", name)
@@ -71,16 +71,16 @@ func (f *Factory[T]) Update(name string) (*cereal.Update[T], error) {
 	return f.modifyFromSpec(updateCap.Spec), nil
 }
 
-// Delete returns a cereal Delete builder for the named capability.
+// Delete returns a soy Delete builder for the named capability.
 // Returns an error if the capability doesn't exist.
-func (f *Factory[T]) Delete(name string) (*cereal.Delete[T], error) {
+func (f *Factory[T]) Delete(name string) (*soy.Delete[T], error) {
 	f.mu.RLock()
 	deleteCap, exists := f.deletes[name]
 	f.mu.RUnlock()
 
 	if !exists {
 		capitan.Emit(context.Background(), CapabilityNotFound,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("delete"))
 		return nil, fmt.Errorf("delete capability %q not found", name)
@@ -89,16 +89,16 @@ func (f *Factory[T]) Delete(name string) (*cereal.Delete[T], error) {
 	return f.removeFromSpec(deleteCap.Spec), nil
 }
 
-// Aggregate returns a cereal Aggregate builder for the named capability.
+// Aggregate returns a soy Aggregate builder for the named capability.
 // Returns an error if the capability doesn't exist.
-func (f *Factory[T]) Aggregate(name string) (*cereal.Aggregate[T], error) {
+func (f *Factory[T]) Aggregate(name string) (*soy.Aggregate[T], error) {
 	f.mu.RLock()
 	aggCap, exists := f.aggregates[name]
 	f.mu.RUnlock()
 
 	if !exists {
 		capitan.Emit(context.Background(), CapabilityNotFound,
-			KeyTable.Field(f.cereal.TableName()),
+			KeyTable.Field(f.soy.TableName()),
 			KeyCapability.Field(name),
 			KeyType.Field("aggregate"))
 		return nil, fmt.Errorf("aggregate capability %q not found", name)
@@ -119,18 +119,18 @@ func (f *Factory[T]) Aggregate(name string) (*cereal.Aggregate[T], error) {
 	}
 }
 
-// Insert returns a cereal Create builder for inserting records.
-// This uses the underlying cereal.Insert() directly since inserts
+// Insert returns a soy Create builder for inserting records.
+// This uses the underlying soy.Insert() directly since inserts
 // are driven by struct fields rather than specs.
-func (f *Factory[T]) Insert() *cereal.Create[T] {
-	return f.cereal.Insert()
+func (f *Factory[T]) Insert() *soy.Create[T] {
+	return f.soy.Insert()
 }
 
-// Compound returns a cereal Compound builder from a CompoundQuerySpec.
+// Compound returns a soy Compound builder from a CompoundQuerySpec.
 // Compound queries combine multiple queries using set operations (UNION, INTERSECT, EXCEPT).
 // Unlike other operations, compound queries are not registered as capabilities - they are
 // constructed directly from a spec since they represent ad-hoc combinations.
-func (f *Factory[T]) Compound(spec CompoundQuerySpec) (*cereal.Compound[T], error) {
+func (f *Factory[T]) Compound(spec CompoundQuerySpec) (*soy.Compound[T], error) {
 	return f.compoundFromSpec(spec)
 }
 

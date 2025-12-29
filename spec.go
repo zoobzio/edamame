@@ -485,7 +485,7 @@ func (f *Factory[T]) Spec() FactorySpec {
 	defer f.mu.RUnlock()
 
 	spec := FactorySpec{
-		Table:      f.cereal.TableName(),
+		Table:      f.soy.TableName(),
 		Schema:     f.buildSchemaSpec(),
 		Queries:    make([]QueryCapabilitySpec, 0, len(f.queries)),
 		Selects:    make([]SelectCapabilitySpec, 0, len(f.selects)),
@@ -587,9 +587,9 @@ func (f *Factory[T]) SpecJSON() (string, error) {
 	return string(data), nil
 }
 
-// buildSchemaSpec constructs the schema specification from cereal metadata.
+// buildSchemaSpec constructs the schema specification from soy metadata.
 func (f *Factory[T]) buildSchemaSpec() SchemaSpec {
-	meta := f.cereal.Metadata()
+	meta := f.soy.Metadata()
 
 	schema := SchemaSpec{
 		PrimaryKey: f.primaryKey,
