@@ -10,7 +10,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/zoobzio/astql v0.1.0
 	github.com/zoobzio/capitan v0.1.0
-	github.com/zoobzio/soy v0.0.9
+	github.com/zoobzio/soy v0.0.10
 )
 
 require (
@@ -57,8 +57,9 @@ require (
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	github.com/zoobzio/atom v0.0.5 // indirect
 	github.com/zoobzio/dbml v0.1.0 // indirect
-	github.com/zoobzio/sentinel v0.1.1 // indirect
+	github.com/zoobzio/sentinel v0.1.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
 	go.opentelemetry.io/otel v1.39.0 // indirect

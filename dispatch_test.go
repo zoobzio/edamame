@@ -994,3 +994,93 @@ func TestExecCompound(t *testing.T) {
 		t.Errorf("expected 2 users, got %d", len(users))
 	}
 }
+
+// -----------------------------------------------------------------------------
+// ExecAtom Tests
+// -----------------------------------------------------------------------------
+
+func TestExecQueryAtom(t *testing.T) {
+	truncateUsers(t)
+	ctx := context.Background()
+
+	age1, age2 := 25, 30
+	insertTestUser(t, "alice@test.com", "Alice", &age1)
+	insertTestUser(t, "bob@test.com", "Bob", &age2)
+
+	factory, err := New[User](testDB, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	atoms, err := factory.ExecQueryAtom(ctx, "query", nil)
+	if err != nil {
+		t.Fatalf("ExecQueryAtom() failed: %v", err)
+	}
+
+	if len(atoms) != 2 {
+		t.Errorf("expected 2 atoms, got %d", len(atoms))
+	}
+}
+
+func TestExecSelectAtom(t *testing.T) {
+	truncateUsers(t)
+	ctx := context.Background()
+
+	age := 25
+	id := insertTestUser(t, "alice@test.com", "Alice", &age)
+
+	factory, err := New[User](testDB, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	atom, err := factory.ExecSelectAtom(ctx, "select", map[string]any{"id": id})
+	if err != nil {
+		t.Fatalf("ExecSelectAtom() failed: %v", err)
+	}
+
+	if atom == nil {
+		t.Fatal("expected non-nil atom")
+	}
+}
+
+func TestExecInsertAtom(t *testing.T) {
+	truncateUsers(t)
+	ctx := context.Background()
+
+	factory, err := New[User](testDB, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	age := 28
+	atom, err := factory.ExecInsertAtom(ctx, map[string]any{
+		"email": "charlie@test.com",
+		"name":  "Charlie",
+		"age":   &age,
+	})
+	if err != nil {
+		t.Fatalf("ExecInsertAtom() failed: %v", err)
+	}
+
+	if atom == nil {
+		t.Fatal("expected non-nil atom")
+	}
+}
+
+func TestExecAtomMissingCapability(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	_, err = factory.ExecQueryAtom(context.TODO(), "nonexistent", nil)
+	if err == nil {
+		t.Error("ExecQueryAtom('nonexistent') should return error")
+	}
+
+	_, err = factory.ExecSelectAtom(context.TODO(), "nonexistent", nil)
+	if err == nil {
+		t.Error("ExecSelectAtom('nonexistent') should return error")
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/zoobzio/atom"
 	"github.com/zoobzio/capitan"
 	"github.com/zoobzio/soy"
 )
@@ -306,4 +307,30 @@ func (f *Factory[T]) ExecDeleteBatchTx(ctx context.Context, tx *sqlx.Tx, name st
 		return 0, err
 	}
 	return d.ExecBatchTx(ctx, tx, batchParams)
+}
+
+// ExecQueryAtom executes a named query capability and returns results as Atoms.
+// This enables type-erased execution where T is not known at consumption time.
+func (f *Factory[T]) ExecQueryAtom(ctx context.Context, name string, params map[string]any) ([]*atom.Atom, error) {
+	q, err := f.Query(name)
+	if err != nil {
+		return nil, err
+	}
+	return q.ExecAtom(ctx, params)
+}
+
+// ExecSelectAtom executes a named select capability and returns the result as an Atom.
+// This enables type-erased execution where T is not known at consumption time.
+func (f *Factory[T]) ExecSelectAtom(ctx context.Context, name string, params map[string]any) (*atom.Atom, error) {
+	s, err := f.Select(name)
+	if err != nil {
+		return nil, err
+	}
+	return s.ExecAtom(ctx, params)
+}
+
+// ExecInsertAtom executes an insert and returns the result as an Atom.
+// This enables type-erased execution where T is not known at consumption time.
+func (f *Factory[T]) ExecInsertAtom(ctx context.Context, params map[string]any) (*atom.Atom, error) {
+	return f.Insert().ExecAtom(ctx, params)
 }
