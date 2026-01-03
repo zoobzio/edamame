@@ -8,10 +8,10 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 	github.com/testcontainers/testcontainers-go v0.40.0
-	github.com/zoobzio/astql v0.1.2
+	github.com/zoobzio/astql v0.1.4
 	github.com/zoobzio/atom v0.0.6
 	github.com/zoobzio/capitan v0.1.3
-	github.com/zoobzio/soy v0.0.12
+	github.com/zoobzio/soy v0.0.13
 )
 
 require (
