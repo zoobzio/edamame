@@ -83,7 +83,7 @@ const DefaultMaxConditionDepth = 10
 // Factory provides a capability-driven query API for a specific model type.
 // It wraps soy with named, introspectable query capabilities.
 type Factory[T any] struct {
-	db         *sqlx.DB
+	db         sqlx.ExtContext
 	soy        *soy.Soy[T]
 	primaryKey string
 
@@ -104,7 +104,10 @@ type Factory[T any] struct {
 
 // New creates a new Factory for type T with the given database connection, table name, and renderer.
 // CRUD capabilities are registered automatically based on struct metadata.
-func New[T any](db *sqlx.DB, tableName string, renderer astql.Renderer) (*Factory[T], error) {
+//
+// The db parameter accepts sqlx.ExtContext, which is satisfied by both *sqlx.DB and *sqlx.Tx,
+// enabling transaction support by passing a transaction instead of a database connection.
+func New[T any](db sqlx.ExtContext, tableName string, renderer astql.Renderer) (*Factory[T], error) {
 	c, err := soy.New[T](db, tableName, renderer)
 	if err != nil {
 		return nil, fmt.Errorf("edamame: failed to create soy instance: %w", err)
@@ -309,61 +312,6 @@ func (f *Factory[T]) RenderCompound(spec CompoundQuerySpec) (string, error) {
 		return "", err
 	}
 	return result.SQL, nil
-}
-
-// PrepareQuery creates a prepared statement for a query capability.
-// The prepared statement can be reused for better performance.
-// The caller is responsible for closing the statement when done.
-func (f *Factory[T]) PrepareQuery(ctx context.Context, name string) (*sqlx.Stmt, error) {
-	sql, err := f.RenderQuery(name)
-	if err != nil {
-		return nil, err
-	}
-	return f.db.PreparexContext(ctx, sql)
-}
-
-// PrepareSelect creates a prepared statement for a select capability.
-// The prepared statement can be reused for better performance.
-// The caller is responsible for closing the statement when done.
-func (f *Factory[T]) PrepareSelect(ctx context.Context, name string) (*sqlx.Stmt, error) {
-	sql, err := f.RenderSelect(name)
-	if err != nil {
-		return nil, err
-	}
-	return f.db.PreparexContext(ctx, sql)
-}
-
-// PrepareUpdate creates a prepared statement for an update capability.
-// The prepared statement can be reused for better performance.
-// The caller is responsible for closing the statement when done.
-func (f *Factory[T]) PrepareUpdate(ctx context.Context, name string) (*sqlx.Stmt, error) {
-	sql, err := f.RenderUpdate(name)
-	if err != nil {
-		return nil, err
-	}
-	return f.db.PreparexContext(ctx, sql)
-}
-
-// PrepareDelete creates a prepared statement for a delete capability.
-// The prepared statement can be reused for better performance.
-// The caller is responsible for closing the statement when done.
-func (f *Factory[T]) PrepareDelete(ctx context.Context, name string) (*sqlx.Stmt, error) {
-	sql, err := f.RenderDelete(name)
-	if err != nil {
-		return nil, err
-	}
-	return f.db.PreparexContext(ctx, sql)
-}
-
-// PrepareAggregate creates a prepared statement for an aggregate capability.
-// The prepared statement can be reused for better performance.
-// The caller is responsible for closing the statement when done.
-func (f *Factory[T]) PrepareAggregate(ctx context.Context, name string) (*sqlx.Stmt, error) {
-	sql, err := f.RenderAggregate(name)
-	if err != nil {
-		return nil, err
-	}
-	return f.db.PreparexContext(ctx, sql)
 }
 
 // TableName returns the table name for this factory.
