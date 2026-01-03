@@ -44,7 +44,7 @@ No code generation. No rebuild. Change queries in production.
 go get github.com/zoobzio/edamame
 ```
 
-Requires Go 1.24+. Supports PostgreSQL, MySQL, SQLite, and SQL Server via [astql](https://github.com/zoobzio/astql).
+Requires Go 1.24+. Supports PostgreSQL, MariaDB, SQLite, and SQL Server via [astql](https://github.com/zoobzio/astql).
 
 ## Quick Start
 
@@ -56,8 +56,8 @@ import (
     "fmt"
 
     "github.com/jmoiron/sqlx"
-    _ "github.com/lib/pq" // or mysql, sqlite3, mssql driver
-    "github.com/zoobzio/astql/pkg/postgres" // or mysql, sqlite, mssql
+    _ "github.com/lib/pq" // or mariadb, sqlite3, mssql driver
+    "github.com/zoobzio/astql/pkg/postgres" // or mariadb, sqlite, mssql
     "github.com/zoobzio/edamame"
 )
 
