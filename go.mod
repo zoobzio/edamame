@@ -11,7 +11,7 @@ require (
 	github.com/zoobzio/astql v0.1.0
 	github.com/zoobzio/atom v0.0.5
 	github.com/zoobzio/capitan v0.1.0
-	github.com/zoobzio/soy v0.0.10
+	github.com/zoobzio/soy v0.0.11
 )
 
 require (
@@ -73,5 +73,3 @@ require (
 	golang.org/x/time v0.14.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/zoobzio/soy => ../soy
