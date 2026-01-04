@@ -3,14 +3,11 @@ package edamame
 import "testing"
 
 func TestEventKeys(t *testing.T) {
-	// Verify all event keys are defined
 	keys := []struct {
 		name string
 		key  interface{}
 	}{
 		{"KeyTable", KeyTable},
-		{"KeyCapability", KeyCapability},
-		{"KeyType", KeyType},
 		{"KeyError", KeyError},
 		{"KeyDuration", KeyDuration},
 	}
@@ -25,15 +22,11 @@ func TestEventKeys(t *testing.T) {
 }
 
 func TestSignals(t *testing.T) {
-	// Verify all signals are defined
 	signals := []struct {
 		name   string
 		signal interface{}
 	}{
-		{"FactoryCreated", FactoryCreated},
-		{"CapabilityAdded", CapabilityAdded},
-		{"CapabilityRemoved", CapabilityRemoved},
-		{"CapabilityNotFound", CapabilityNotFound},
+		{"ExecutorCreated", ExecutorCreated},
 	}
 
 	for _, s := range signals {

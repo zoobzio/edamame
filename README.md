@@ -9,34 +9,36 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/zoobzio/edamame)](go.mod)
 [![Release](https://img.shields.io/github/v/release/zoobzio/edamame)](https://github.com/zoobzio/edamame/releases)
 
-Runtime query factory for Go.
+Statement-driven query exec for Go.
 
-Define database queries as data, register them at runtime, reconfigure without rebuilding.
+Define database queries as typed statements, execute them without magic strings.
 
 ## Queries as Data
 
-Edamame treats queries as specs—pure data structures you can create, store, and swap at runtime.
+Edamame treats queries as specs—pure data structures wrapped in typed statements.
 
 ```go
-// A query is just data
-spec := edamame.QuerySpec{
-    Where:   []edamame.ConditionSpec{{Field: "status", Operator: "=", Param: "status"}},
-    OrderBy: []edamame.OrderBySpec{{Field: "created_at", Direction: "desc"}},
-    Limit:   ptr(50),
-}
+// Define statements as package-level variables
+var (
+    QueryAll = edamame.NewQueryStatement("query-all", "Query all users", edamame.QuerySpec{})
 
-// Register it
-factory.AddQuery(edamame.QueryCapability{Name: "by-status", Spec: spec})
+    ByStatus = edamame.NewQueryStatement("by-status", "Query users by status", edamame.QuerySpec{
+        Where:   []edamame.ConditionSpec{{Field: "status", Operator: "=", Param: "status"}},
+        OrderBy: []edamame.OrderBySpec{{Field: "created_at", Direction: "desc"}},
+        Limit:   ptr(50),
+    })
 
-// Execute by name
-users, _ := factory.ExecQuery(ctx, "by-status", map[string]any{"status": "active"})
+    SelectByID = edamame.NewSelectStatement("select-by-id", "Select user by ID", edamame.SelectSpec{
+        Where: []edamame.ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+    })
+)
 
-// Later: hot-swap without rebuild
-factory.RemoveQuery("by-status")
-factory.AddQuery(edamame.QueryCapability{Name: "by-status", Spec: optimizedSpec})
+// Execute with type safety
+users, _ := exec.ExecQuery(ctx, ByStatus, map[string]any{"status": "active"})
+user, _ := exec.ExecSelect(ctx, SelectByID, map[string]any{"id": 123})
 ```
 
-No code generation. No rebuild. Change queries in production.
+Type-safe. No magic strings. Compile-time guarantees.
 
 ## Install
 
@@ -68,63 +70,78 @@ type User struct {
     Status string `db:"status" type:"text"`
 }
 
+// Define statements
+var (
+    QueryAll = edamame.NewQueryStatement("query-all", "Query all users", edamame.QuerySpec{})
+
+    SelectByID = edamame.NewSelectStatement("select-by-id", "Select user by ID", edamame.SelectSpec{
+        Where: []edamame.ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+    })
+
+    CountAll = edamame.NewAggregateStatement("count-all", "Count all users", edamame.AggCount, edamame.AggregateSpec{})
+
+    ActiveUsers = edamame.NewQueryStatement("active", "Query active users", edamame.QuerySpec{
+        Where: []edamame.ConditionSpec{
+            {Field: "status", Operator: "=", Param: "status"},
+        },
+    })
+)
+
 func main() {
     db, _ := sqlx.Connect("postgres", "postgres://localhost/mydb?sslmode=disable")
     ctx := context.Background()
 
-    // Create factory (auto-registers select, query, delete, count)
-    factory, _ := edamame.New[User](db, "users", postgres.New())
+    // Create exec
+    exec, _ := edamame.New[User](db, "users", postgres.New())
 
-    // Use built-in capabilities
-    users, _ := factory.ExecQuery(ctx, "query", nil)
-    user, _ := factory.ExecSelect(ctx, "select", map[string]any{"id": 1})
-    count, _ := factory.ExecAggregate(ctx, "count", nil)
+    // Execute statements
+    users, _ := exec.ExecQuery(ctx, QueryAll, nil)
+    user, _ := exec.ExecSelect(ctx, SelectByID, map[string]any{"id": 1})
+    count, _ := exec.ExecAggregate(ctx, CountAll, nil)
+    active, _ := exec.ExecQuery(ctx, ActiveUsers, map[string]any{"status": "active"})
 
-    // Add custom capability
-    factory.AddQuery(edamame.QueryCapability{
-        Name: "active",
-        Spec: edamame.QuerySpec{
-            Where: []edamame.ConditionSpec{
-                {Field: "status", Operator: "=", Param: "status"},
-            },
-        },
-    })
-
-    active, _ := factory.ExecQuery(ctx, "active", map[string]any{"status": "active"})
-    fmt.Printf("%d users, %d active\n", len(users), len(active))
+    fmt.Printf("%d users, user #1: %s, %.0f total, %d active\n", len(users), user.Name, count, len(active))
 }
 ```
 
-## Runtime Reconfiguration
-
-The real value: modify query behavior without touching code.
+## Statement Types
 
 ```go
-// Load specs from config, database, or remote source
-specs := loadQuerySpecs("queries.json")
+// Multi-record queries
+var QueryAdults = edamame.NewQueryStatement("adults", "Find adult users", edamame.QuerySpec{
+    Where: []edamame.ConditionSpec{{Field: "age", Operator: ">=", Param: "min_age"}},
+    OrderBy: []edamame.OrderBySpec{{Field: "name", Direction: "asc"}},
+})
 
-for _, s := range specs {
-    factory.AddQuery(s)
-}
+// Single-record selects
+var SelectByEmail = edamame.NewSelectStatement("by-email", "Select user by email", edamame.SelectSpec{
+    Where: []edamame.ConditionSpec{{Field: "email", Operator: "=", Param: "email"}},
+})
 
-// Query running slow? Swap it out
-factory.RemoveQuery("expensive-query")
-factory.AddQuery(optimizedVersion)
+// Updates
+var UpdateName = edamame.NewUpdateStatement("update-name", "Update user name", edamame.UpdateSpec{
+    Set:   map[string]string{"name": "new_name"},
+    Where: []edamame.ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+})
 
-// Export what's available
-json, _ := factory.SpecJSON()
+// Deletes
+var DeleteInactive = edamame.NewDeleteStatement("delete-inactive", "Delete inactive users", edamame.DeleteSpec{
+    Where: []edamame.ConditionSpec{{Field: "status", Operator: "=", Param: "status"}},
+})
+
+// Aggregates
+var SumAges = edamame.NewAggregateStatement("sum-ages", "Sum all ages", edamame.AggSum, edamame.AggregateSpec{
+    Field: "age",
+})
 ```
-
-Specs are JSON-serializable. Store them anywhere. Load them anytime.
 
 ## Why edamame?
 
-- **No build cycle** — define and modify queries at runtime
-- **Hot reconfiguration** — swap underperforming queries in production
-- **Specs are data** — JSON-serializable, storable, versionable
-- **Type-safe** — generic `Factory[T]` with compile-time safety via [soy](https://github.com/zoobzio/soy)
-- **Named capabilities** — queries registered once, executed by name
-- **Thread-safe** — concurrent reads, serialized writes
+- **Type-safe** — Generic `Executor[T]` with compile-time safety via [soy](https://github.com/zoobzio/soy)
+- **No magic strings** — Typed statements, not string keys
+- **Declarative** — Specs are data, statements wrap them with identity
+- **Compile-time guarantees** — Pass wrong statement type? Compiler catches it
+- **Thread-safe** — Concurrent execution, no shared mutable state
 
 ## Documentation
 
@@ -134,7 +151,7 @@ Specs are JSON-serializable. Store them anywhere. Load them anytime.
 - [Architecture](docs/2.learn/3.architecture.md)
 
 ### Guides
-- [Capabilities](docs/3.guides/1.capabilities.md)
+- [Statements](docs/3.guides/1.capabilities.md)
 - [Testing](docs/3.guides/2.testing.md)
 
 ### Reference

@@ -29,6 +29,30 @@ type User struct {
 	Age   *int   `db:"age" type:"integer"`
 }
 
+// Define integration test statements
+var (
+	queryAll = edamame.NewQueryStatement("query-all", "Query all users", edamame.QuerySpec{})
+
+	selectByID = edamame.NewSelectStatement("select-by-id", "Select user by ID", edamame.SelectSpec{
+		Where: []edamame.ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+	})
+
+	deleteByID = edamame.NewDeleteStatement("delete-by-id", "Delete user by ID", edamame.DeleteSpec{
+		Where: []edamame.ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+	})
+
+	countAll = edamame.NewAggregateStatement("count-all", "Count all users", edamame.AggCount, edamame.AggregateSpec{})
+
+	queryAdults = edamame.NewQueryStatement("adults", "Find adult users", edamame.QuerySpec{
+		Where: []edamame.ConditionSpec{
+			{Field: "age", Operator: ">=", Param: "min_age"},
+		},
+		OrderBy: []edamame.OrderBySpec{
+			{Field: "age", Direction: "asc"},
+		},
+	})
+)
+
 // PostgresContainer wraps a testcontainer postgres instance.
 type PostgresContainer struct {
 	container testcontainers.Container
@@ -148,18 +172,9 @@ func TestPostgresIntegration_FactoryCreation(t *testing.T) {
 		t.Fatalf("failed to create factory: %v", err)
 	}
 
-	// Verify default capabilities are registered
-	if !factory.HasQuery("query") {
-		t.Error("missing default query capability")
-	}
-	if !factory.HasSelect("select") {
-		t.Error("missing default select capability")
-	}
-	if !factory.HasDelete("delete") {
-		t.Error("missing default delete capability")
-	}
-	if !factory.HasAggregate("count") {
-		t.Error("missing default count capability")
+	// Verify factory is usable
+	if factory.TableName() != "users" {
+		t.Errorf("expected table name 'users', got %q", factory.TableName())
 	}
 }
 
@@ -191,7 +206,7 @@ func TestPostgresIntegration_QueryAll(t *testing.T) {
 		t.Fatalf("failed to create factory: %v", err)
 	}
 
-	users, err := factory.ExecQuery(ctx, "query", nil)
+	users, err := factory.ExecQuery(ctx, queryAll, nil)
 	if err != nil {
 		t.Fatalf("failed to execute query: %v", err)
 	}
@@ -225,7 +240,7 @@ func TestPostgresIntegration_SelectByPrimaryKey(t *testing.T) {
 		t.Fatalf("failed to create factory: %v", err)
 	}
 
-	user, err := factory.ExecSelect(ctx, "select", map[string]any{"id": id})
+	user, err := factory.ExecSelect(ctx, selectByID, map[string]any{"id": id})
 	if err != nil {
 		t.Fatalf("failed to execute select: %v", err)
 	}
@@ -276,7 +291,7 @@ func TestPostgresIntegration_Insert(t *testing.T) {
 	}
 
 	// Verify in database
-	retrieved, err := factory.ExecSelect(ctx, "select", map[string]any{"id": inserted.ID})
+	retrieved, err := factory.ExecSelect(ctx, selectByID, map[string]any{"id": inserted.ID})
 	if err != nil {
 		t.Fatalf("failed to retrieve inserted user: %v", err)
 	}
@@ -309,7 +324,7 @@ func TestPostgresIntegration_Delete(t *testing.T) {
 		t.Fatalf("failed to create factory: %v", err)
 	}
 
-	deleted, err := factory.ExecDelete(ctx, "delete", map[string]any{"id": id})
+	deleted, err := factory.ExecDelete(ctx, deleteByID, map[string]any{"id": id})
 	if err != nil {
 		t.Fatalf("failed to execute delete: %v", err)
 	}
@@ -319,7 +334,7 @@ func TestPostgresIntegration_Delete(t *testing.T) {
 	}
 
 	// Verify user is gone
-	_, err = factory.ExecSelect(ctx, "select", map[string]any{"id": id})
+	_, err = factory.ExecSelect(ctx, selectByID, map[string]any{"id": id})
 	if err == nil {
 		t.Error("expected error when selecting deleted user")
 	}
@@ -352,7 +367,7 @@ func TestPostgresIntegration_Count(t *testing.T) {
 		t.Fatalf("failed to create factory: %v", err)
 	}
 
-	count, err := factory.ExecAggregate(ctx, "count", nil)
+	count, err := factory.ExecAggregate(ctx, countAll, nil)
 	if err != nil {
 		t.Fatalf("failed to execute count: %v", err)
 	}
@@ -389,21 +404,7 @@ func TestPostgresIntegration_CustomQuery(t *testing.T) {
 		t.Fatalf("failed to create factory: %v", err)
 	}
 
-	// Add custom query for users over a certain age
-	factory.AddQuery(edamame.QueryCapability{
-		Name:        "adults",
-		Description: "Find adult users",
-		Spec: edamame.QuerySpec{
-			Where: []edamame.ConditionSpec{
-				{Field: "age", Operator: ">=", Param: "min_age"},
-			},
-			OrderBy: []edamame.OrderBySpec{
-				{Field: "age", Direction: "asc"},
-			},
-		},
-	})
-
-	users, err := factory.ExecQuery(ctx, "adults", map[string]any{"min_age": 25})
+	users, err := factory.ExecQuery(ctx, queryAdults, map[string]any{"min_age": 25})
 	if err != nil {
 		t.Fatalf("failed to execute custom query: %v", err)
 	}
@@ -459,7 +460,7 @@ func TestPostgresIntegration_Transaction(t *testing.T) {
 	}
 
 	// Query within same transaction - should see the insert
-	users, err := factory.ExecQueryTx(ctx, tx, "query", nil)
+	users, err := factory.ExecQueryTx(ctx, tx, queryAll, nil)
 	if err != nil {
 		tx.Rollback()
 		t.Fatalf("failed to query in transaction: %v", err)
@@ -476,7 +477,7 @@ func TestPostgresIntegration_Transaction(t *testing.T) {
 	}
 
 	// Verify rollback - user should not exist
-	_, err = factory.ExecSelect(ctx, "select", map[string]any{"id": inserted.ID})
+	_, err = factory.ExecSelect(ctx, selectByID, map[string]any{"id": inserted.ID})
 	if err == nil {
 		t.Error("expected error - user should not exist after rollback")
 	}
@@ -521,69 +522,12 @@ func TestPostgresIntegration_BatchInsert(t *testing.T) {
 	}
 
 	// Verify count
-	totalCount, err := factory.ExecAggregate(ctx, "count", nil)
+	totalCount, err := factory.ExecAggregate(ctx, countAll, nil)
 	if err != nil {
 		t.Fatalf("failed to count: %v", err)
 	}
 
 	if totalCount != 10 {
 		t.Errorf("expected total count 10, got %f", totalCount)
-	}
-}
-
-func TestPostgresIntegration_Spec(t *testing.T) {
-	ctx := context.Background()
-
-	pg, err := NewPostgresContainer(ctx)
-	if err != nil {
-		t.Fatalf("failed to create postgres container: %v", err)
-	}
-	defer pg.Close(ctx)
-
-	if err := pg.SetupUsersTable(ctx); err != nil {
-		t.Fatalf("failed to setup users table: %v", err)
-	}
-
-	factory, err := edamame.New[User](pg.DB(), "users", postgres.New())
-	if err != nil {
-		t.Fatalf("failed to create factory: %v", err)
-	}
-
-	// Add custom capabilities
-	factory.AddQuery(edamame.QueryCapability{
-		Name:        "by-age",
-		Description: "Find users by age range",
-		Spec: edamame.QuerySpec{
-			Where: []edamame.ConditionSpec{
-				{Field: "age", Operator: ">=", Param: "min_age"},
-				{Field: "age", Operator: "<=", Param: "max_age"},
-			},
-		},
-	})
-
-	spec := factory.Spec()
-
-	if spec.Table != "users" {
-		t.Errorf("expected table 'users', got %q", spec.Table)
-	}
-
-	// Should have default + custom queries
-	if len(spec.Queries) < 2 {
-		t.Errorf("expected at least 2 queries, got %d", len(spec.Queries))
-	}
-
-	// Find custom query
-	var found bool
-	for _, q := range spec.Queries {
-		if q.Name == "by-age" {
-			found = true
-			if len(q.Params) != 2 {
-				t.Errorf("expected 2 params for by-age, got %d", len(q.Params))
-			}
-		}
-	}
-
-	if !found {
-		t.Error("custom query 'by-age' not found in spec")
 	}
 }

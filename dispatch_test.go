@@ -20,6 +20,37 @@ var testDB *sqlx.DB
 // testContainer holds the shared container reference.
 var testContainer testcontainers.Container
 
+// Test statements
+var (
+	queryAll = NewQueryStatement("query-all", "Query all users", QuerySpec{})
+
+	selectByID = NewSelectStatement("select-by-id", "Select user by ID", SelectSpec{
+		Where: []ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+	})
+
+	updateName = NewUpdateStatement("update-name", "Update user name", UpdateSpec{
+		Set:   map[string]string{"name": "new_name"},
+		Where: []ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+	})
+
+	deleteByID = NewDeleteStatement("delete-by-id", "Delete user by ID", DeleteSpec{
+		Where: []ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+	})
+
+	countAll = NewAggregateStatement("count-all", "Count all users", AggCount, AggregateSpec{})
+
+	queryByAge = NewQueryStatement("query-by-age", "Query users by age", QuerySpec{
+		Where:   []ConditionSpec{{Field: "age", Operator: ">=", Param: "min_age"}},
+		OrderBy: []OrderBySpec{{Field: "age", Direction: "desc"}},
+		Limit:   intPtr(10),
+	})
+
+	sumAge = NewAggregateStatement("sum-age", "Sum of ages", AggSum, AggregateSpec{Field: "age"})
+	avgAge = NewAggregateStatement("avg-age", "Average age", AggAvg, AggregateSpec{Field: "age"})
+	minAge = NewAggregateStatement("min-age", "Minimum age", AggMin, AggregateSpec{Field: "age"})
+	maxAge = NewAggregateStatement("max-age", "Maximum age", AggMax, AggregateSpec{Field: "age"})
+)
+
 // TestMain sets up a shared postgres container for all tests.
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -120,16 +151,14 @@ func TestQueryDispatch(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	// Get the default query builder
-	builder, err := factory.Query("query")
+	builder, err := factory.Query(queryAll)
 	if err != nil {
-		t.Fatalf("Query('query') failed: %v", err)
+		t.Fatalf("Query() failed: %v", err)
 	}
 	if builder == nil {
-		t.Fatal("Query('query') returned nil")
+		t.Fatal("Query() returned nil")
 	}
 
-	// Render to verify it produces valid SQL
 	result, err := builder.Render()
 	if err != nil {
 		t.Fatalf("Render() failed: %v", err)
@@ -146,12 +175,12 @@ func TestSelectDispatch(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	builder, err := factory.Select("select")
+	builder, err := factory.Select(selectByID)
 	if err != nil {
-		t.Fatalf("Select('select') failed: %v", err)
+		t.Fatalf("Select() failed: %v", err)
 	}
 	if builder == nil {
-		t.Fatal("Select('select') returned nil")
+		t.Fatal("Select() returned nil")
 	}
 
 	result, err := builder.Render()
@@ -159,7 +188,6 @@ func TestSelectDispatch(t *testing.T) {
 		t.Fatalf("Render() failed: %v", err)
 	}
 
-	// Should have WHERE clause with id
 	if result.SQL == "" {
 		t.Error("Render() produced empty SQL")
 	}
@@ -171,23 +199,9 @@ func TestUpdateDispatch(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	// Register a custom update capability (no default update exists)
-	factory.AddUpdate(UpdateCapability{
-		Name: "update-name",
-		Spec: UpdateSpec{
-			Set: map[string]string{"name": "new_name"},
-			Where: []ConditionSpec{
-				{Field: "id", Operator: "=", Param: "id"},
-			},
-		},
-	})
-
-	builder, err := factory.Update("update-name")
-	if err != nil {
-		t.Fatalf("Update('update-name') failed: %v", err)
-	}
+	builder := factory.Update(updateName)
 	if builder == nil {
-		t.Fatal("Update('update-name') returned nil")
+		t.Fatal("Update() returned nil")
 	}
 
 	result, err := builder.Render()
@@ -206,12 +220,9 @@ func TestDeleteDispatch(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	builder, err := factory.Delete("delete")
-	if err != nil {
-		t.Fatalf("Delete('delete') failed: %v", err)
-	}
+	builder := factory.Delete(deleteByID)
 	if builder == nil {
-		t.Fatal("Delete('delete') returned nil")
+		t.Fatal("Delete() returned nil")
 	}
 
 	result, err := builder.Render()
@@ -230,12 +241,9 @@ func TestAggregateDispatch(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	builder, err := factory.Aggregate("count")
-	if err != nil {
-		t.Fatalf("Aggregate('count') failed: %v", err)
-	}
+	builder := factory.Aggregate(countAll)
 	if builder == nil {
-		t.Fatal("Aggregate('count') returned nil")
+		t.Fatal("Aggregate() returned nil")
 	}
 
 	result, err := builder.Render()
@@ -275,22 +283,9 @@ func TestCustomQueryDispatch(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	factory.AddQuery(QueryCapability{
-		Name: "by-age",
-		Spec: QuerySpec{
-			Where: []ConditionSpec{
-				{Field: "age", Operator: ">=", Param: "min_age"},
-			},
-			OrderBy: []OrderBySpec{
-				{Field: "age", Direction: "desc"},
-			},
-			Limit: intPtr(10),
-		},
-	})
-
-	builder, err := factory.Query("by-age")
+	builder, err := factory.Query(queryByAge)
 	if err != nil {
-		t.Fatalf("Query('by-age') failed: %v", err)
+		t.Fatalf("Query() failed: %v", err)
 	}
 
 	result, err := builder.Render()
@@ -298,9 +293,7 @@ func TestCustomQueryDispatch(t *testing.T) {
 		t.Fatalf("Render() failed: %v", err)
 	}
 
-	// Verify the SQL contains expected clauses
-	sql := result.SQL
-	if sql == "" {
+	if result.SQL == "" {
 		t.Error("Render() produced empty SQL")
 	}
 }
@@ -313,30 +306,17 @@ func TestAggregateDispatchVariants(t *testing.T) {
 
 	tests := []struct {
 		name string
-		fn   AggregateFunc
+		stmt AggregateStatement
 	}{
-		{"sum-age", AggSum},
-		{"avg-age", AggAvg},
-		{"min-age", AggMin},
-		{"max-age", AggMax},
-	}
-
-	for _, tt := range tests {
-		factory.AddAggregate(AggregateCapability{
-			Name: tt.name,
-			Func: tt.fn,
-			Spec: AggregateSpec{
-				Field: "age",
-			},
-		})
+		{"sum-age", sumAge},
+		{"avg-age", avgAge},
+		{"min-age", minAge},
+		{"max-age", maxAge},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			builder, err := factory.Aggregate(tt.name)
-			if err != nil {
-				t.Fatalf("Aggregate('%s') failed: %v", tt.name, err)
-			}
+			builder := factory.Aggregate(tt.stmt)
 
 			result, err := builder.Render()
 			if err != nil {
@@ -350,49 +330,15 @@ func TestAggregateDispatchVariants(t *testing.T) {
 	}
 }
 
-func TestDispatchMissingCapability(t *testing.T) {
-	factory, err := New[User](nil, "users", postgres.New())
-	if err != nil {
-		t.Fatalf("New() failed: %v", err)
-	}
-
-	// These should return errors immediately
-	_, err = factory.Query("nonexistent")
-	if err == nil {
-		t.Error("Query('nonexistent') should return error")
-	}
-
-	_, err = factory.Select("nonexistent")
-	if err == nil {
-		t.Error("Select('nonexistent') should return error")
-	}
-
-	_, err = factory.Update("nonexistent")
-	if err == nil {
-		t.Error("Update('nonexistent') should return error")
-	}
-
-	_, err = factory.Delete("nonexistent")
-	if err == nil {
-		t.Error("Delete('nonexistent') should return error")
-	}
-
-	_, err = factory.Aggregate("nonexistent")
-	if err == nil {
-		t.Error("Aggregate('nonexistent') should return error")
-	}
-}
-
 func TestBuilderChaining(t *testing.T) {
 	factory, err := New[User](nil, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	// Should be able to chain additional methods
-	builder, err := factory.Query("query")
+	builder, err := factory.Query(queryAll)
 	if err != nil {
-		t.Fatalf("Query('query') failed: %v", err)
+		t.Fatalf("Query() failed: %v", err)
 	}
 
 	result, err := builder.
@@ -420,26 +366,15 @@ func TestRenderMethods(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	// Add an update capability for testing
-	factory.AddUpdate(UpdateCapability{
-		Name: "update-name",
-		Spec: UpdateSpec{
-			Set: map[string]string{"name": "new_name"},
-			Where: []ConditionSpec{
-				{Field: "id", Operator: "=", Param: "id"},
-			},
-		},
-	})
-
 	tests := []struct {
 		name   string
 		render func() (string, error)
 	}{
-		{"RenderQuery", func() (string, error) { return factory.RenderQuery("query") }},
-		{"RenderSelect", func() (string, error) { return factory.RenderSelect("select") }},
-		{"RenderUpdate", func() (string, error) { return factory.RenderUpdate("update-name") }},
-		{"RenderDelete", func() (string, error) { return factory.RenderDelete("delete") }},
-		{"RenderAggregate", func() (string, error) { return factory.RenderAggregate("count") }},
+		{"RenderQuery", func() (string, error) { return factory.RenderQuery(queryAll) }},
+		{"RenderSelect", func() (string, error) { return factory.RenderSelect(selectByID) }},
+		{"RenderUpdate", func() (string, error) { return factory.RenderUpdate(updateName) }},
+		{"RenderDelete", func() (string, error) { return factory.RenderDelete(deleteByID) }},
+		{"RenderAggregate", func() (string, error) { return factory.RenderAggregate(countAll) }},
 	}
 
 	for _, tt := range tests {
@@ -452,56 +387,6 @@ func TestRenderMethods(t *testing.T) {
 				t.Errorf("%s returned empty SQL", tt.name)
 			}
 		})
-	}
-}
-
-func TestRenderMissingCapability(t *testing.T) {
-	factory, err := New[User](nil, "users", postgres.New())
-	if err != nil {
-		t.Fatalf("New() failed: %v", err)
-	}
-
-	_, err = factory.RenderQuery("nonexistent")
-	if err == nil {
-		t.Error("RenderQuery('nonexistent') should return error")
-	}
-
-	_, err = factory.RenderSelect("nonexistent")
-	if err == nil {
-		t.Error("RenderSelect('nonexistent') should return error")
-	}
-
-	_, err = factory.RenderUpdate("nonexistent")
-	if err == nil {
-		t.Error("RenderUpdate('nonexistent') should return error")
-	}
-
-	_, err = factory.RenderDelete("nonexistent")
-	if err == nil {
-		t.Error("RenderDelete('nonexistent') should return error")
-	}
-
-	_, err = factory.RenderAggregate("nonexistent")
-	if err == nil {
-		t.Error("RenderAggregate('nonexistent') should return error")
-	}
-}
-
-func TestBatchDispatchMissingCapability(t *testing.T) {
-	factory, err := New[User](nil, "users", postgres.New())
-	if err != nil {
-		t.Fatalf("New() failed: %v", err)
-	}
-
-	// Batch update/delete should fail for nonexistent capabilities
-	_, err = factory.ExecUpdateBatch(context.TODO(), "nonexistent", nil)
-	if err == nil {
-		t.Error("ExecUpdateBatch('nonexistent') should return error")
-	}
-
-	_, err = factory.ExecDeleteBatch(context.TODO(), "nonexistent", nil)
-	if err == nil {
-		t.Error("ExecDeleteBatch('nonexistent') should return error")
 	}
 }
 
@@ -522,7 +407,7 @@ func TestExecQuery(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	users, err := factory.ExecQuery(ctx, "query", nil)
+	users, err := factory.ExecQuery(ctx, queryAll, nil)
 	if err != nil {
 		t.Fatalf("ExecQuery() failed: %v", err)
 	}
@@ -550,7 +435,7 @@ func TestExecQueryTx(t *testing.T) {
 	}
 	defer tx.Rollback()
 
-	users, err := factory.ExecQueryTx(ctx, tx, "query", nil)
+	users, err := factory.ExecQueryTx(ctx, tx, queryAll, nil)
 	if err != nil {
 		t.Fatalf("ExecQueryTx() failed: %v", err)
 	}
@@ -572,7 +457,7 @@ func TestExecSelect(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	user, err := factory.ExecSelect(ctx, "select", map[string]any{"id": id})
+	user, err := factory.ExecSelect(ctx, selectByID, map[string]any{"id": id})
 	if err != nil {
 		t.Fatalf("ExecSelect() failed: %v", err)
 	}
@@ -600,7 +485,7 @@ func TestExecSelectTx(t *testing.T) {
 	}
 	defer tx.Rollback()
 
-	user, err := factory.ExecSelectTx(ctx, tx, "select", map[string]any{"id": id})
+	user, err := factory.ExecSelectTx(ctx, tx, selectByID, map[string]any{"id": id})
 	if err != nil {
 		t.Fatalf("ExecSelectTx() failed: %v", err)
 	}
@@ -622,18 +507,7 @@ func TestExecUpdate(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	err = factory.AddUpdate(UpdateCapability{
-		Name: "update-name",
-		Spec: UpdateSpec{
-			Set:   map[string]string{"name": "new_name"},
-			Where: []ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
-		},
-	})
-	if err != nil {
-		t.Fatalf("AddUpdate() failed: %v", err)
-	}
-
-	updated, err := factory.ExecUpdate(ctx, "update-name", map[string]any{"id": id, "new_name": "Updated"})
+	updated, err := factory.ExecUpdate(ctx, updateName, map[string]any{"id": id, "new_name": "Updated"})
 	if err != nil {
 		t.Fatalf("ExecUpdate() failed: %v", err)
 	}
@@ -655,23 +529,12 @@ func TestExecUpdateTx(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	err = factory.AddUpdate(UpdateCapability{
-		Name: "update-name-tx",
-		Spec: UpdateSpec{
-			Set:   map[string]string{"name": "new_name"},
-			Where: []ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
-		},
-	})
-	if err != nil {
-		t.Fatalf("AddUpdate() failed: %v", err)
-	}
-
 	tx, err := testDB.BeginTxx(ctx, nil)
 	if err != nil {
 		t.Fatalf("BeginTxx() failed: %v", err)
 	}
 
-	updated, err := factory.ExecUpdateTx(ctx, tx, "update-name-tx", map[string]any{"id": id, "new_name": "TxUpdated"})
+	updated, err := factory.ExecUpdateTx(ctx, tx, updateName, map[string]any{"id": id, "new_name": "TxUpdated"})
 	if err != nil {
 		tx.Rollback()
 		t.Fatalf("ExecUpdateTx() failed: %v", err)
@@ -684,7 +547,7 @@ func TestExecUpdateTx(t *testing.T) {
 
 	tx.Rollback()
 
-	user, _ := factory.ExecSelect(ctx, "select", map[string]any{"id": id})
+	user, _ := factory.ExecSelect(ctx, selectByID, map[string]any{"id": id})
 	if user.Name != "Alice" {
 		t.Errorf("expected name 'Alice' after rollback, got %q", user.Name)
 	}
@@ -702,7 +565,7 @@ func TestExecDelete(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	count, err := factory.ExecDelete(ctx, "delete", map[string]any{"id": id})
+	count, err := factory.ExecDelete(ctx, deleteByID, map[string]any{"id": id})
 	if err != nil {
 		t.Fatalf("ExecDelete() failed: %v", err)
 	}
@@ -729,7 +592,7 @@ func TestExecDeleteTx(t *testing.T) {
 		t.Fatalf("BeginTxx() failed: %v", err)
 	}
 
-	count, err := factory.ExecDeleteTx(ctx, tx, "delete", map[string]any{"id": id})
+	count, err := factory.ExecDeleteTx(ctx, tx, deleteByID, map[string]any{"id": id})
 	if err != nil {
 		tx.Rollback()
 		t.Fatalf("ExecDeleteTx() failed: %v", err)
@@ -742,7 +605,7 @@ func TestExecDeleteTx(t *testing.T) {
 
 	tx.Rollback()
 
-	user, err := factory.ExecSelect(ctx, "select", map[string]any{"id": id})
+	user, err := factory.ExecSelect(ctx, selectByID, map[string]any{"id": id})
 	if err != nil {
 		t.Fatalf("user should exist after rollback: %v", err)
 	}
@@ -765,7 +628,7 @@ func TestExecAggregate(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	count, err := factory.ExecAggregate(ctx, "count", nil)
+	count, err := factory.ExecAggregate(ctx, countAll, nil)
 	if err != nil {
 		t.Fatalf("ExecAggregate() failed: %v", err)
 	}
@@ -795,7 +658,7 @@ func TestExecAggregateTx(t *testing.T) {
 	}
 	defer tx.Rollback()
 
-	count, err := factory.ExecAggregateTx(ctx, tx, "count", nil)
+	count, err := factory.ExecAggregateTx(ctx, tx, countAll, nil)
 	if err != nil {
 		t.Fatalf("ExecAggregateTx() failed: %v", err)
 	}
@@ -863,7 +726,7 @@ func TestExecInsertTx(t *testing.T) {
 
 	tx.Rollback()
 
-	_, err = factory.ExecSelect(ctx, "select", map[string]any{"id": inserted.ID})
+	_, err = factory.ExecSelect(ctx, selectByID, map[string]any{"id": inserted.ID})
 	if err == nil {
 		t.Error("user should not exist after rollback")
 	}
@@ -897,7 +760,7 @@ func TestExecInsertBatch(t *testing.T) {
 		t.Errorf("expected 5 inserted, got %d", count)
 	}
 
-	totalCount, err := factory.ExecAggregate(ctx, "count", nil)
+	totalCount, err := factory.ExecAggregate(ctx, countAll, nil)
 	if err != nil {
 		t.Fatalf("ExecAggregate() failed: %v", err)
 	}
@@ -944,7 +807,7 @@ func TestExecInsertBatchTx(t *testing.T) {
 
 	tx.Rollback()
 
-	totalCount, err := factory.ExecAggregate(ctx, "count", nil)
+	totalCount, err := factory.ExecAggregate(ctx, countAll, nil)
 	if err != nil {
 		t.Fatalf("ExecAggregate() failed: %v", err)
 	}
@@ -1012,7 +875,7 @@ func TestExecQueryAtom(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	atoms, err := factory.ExecQueryAtom(ctx, "query", nil)
+	atoms, err := factory.ExecQueryAtom(ctx, queryAll, nil)
 	if err != nil {
 		t.Fatalf("ExecQueryAtom() failed: %v", err)
 	}
@@ -1034,7 +897,7 @@ func TestExecSelectAtom(t *testing.T) {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	atom, err := factory.ExecSelectAtom(ctx, "select", map[string]any{"id": id})
+	atom, err := factory.ExecSelectAtom(ctx, selectByID, map[string]any{"id": id})
 	if err != nil {
 		t.Fatalf("ExecSelectAtom() failed: %v", err)
 	}
@@ -1068,19 +931,259 @@ func TestExecInsertAtom(t *testing.T) {
 	}
 }
 
-func TestExecAtomMissingCapability(t *testing.T) {
-	factory, err := New[User](nil, "users", postgres.New())
+// -----------------------------------------------------------------------------
+// Batch Operations Tests
+// -----------------------------------------------------------------------------
+
+func TestExecUpdateBatch(t *testing.T) {
+	truncateUsers(t)
+	ctx := context.Background()
+
+	// Insert test users
+	for i := 0; i < 3; i++ {
+		age := 20 + i
+		insertTestUser(t, fmt.Sprintf("user%d@test.com", i), fmt.Sprintf("User%d", i), &age)
+	}
+
+	factory, err := New[User](testDB, "users", postgres.New())
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
 
-	_, err = factory.ExecQueryAtom(context.TODO(), "nonexistent", nil)
-	if err == nil {
-		t.Error("ExecQueryAtom('nonexistent') should return error")
+	// Get user IDs
+	users, err := factory.ExecQuery(ctx, queryAll, nil)
+	if err != nil {
+		t.Fatalf("ExecQuery() failed: %v", err)
 	}
 
-	_, err = factory.ExecSelectAtom(context.TODO(), "nonexistent", nil)
-	if err == nil {
-		t.Error("ExecSelectAtom('nonexistent') should return error")
+	// Update all users with different names
+	batchParams := make([]map[string]any, len(users))
+	for i, u := range users {
+		batchParams[i] = map[string]any{
+			"id":       u.ID,
+			"new_name": fmt.Sprintf("Updated%d", i),
+		}
+	}
+
+	count, err := factory.ExecUpdateBatch(ctx, updateName, batchParams)
+	if err != nil {
+		t.Fatalf("ExecUpdateBatch() failed: %v", err)
+	}
+
+	if count != 3 {
+		t.Errorf("expected 3 updated, got %d", count)
+	}
+
+	// Verify updates
+	updated, err := factory.ExecQuery(ctx, queryAll, nil)
+	if err != nil {
+		t.Fatalf("ExecQuery() failed: %v", err)
+	}
+
+	for _, u := range updated {
+		if u.Name[:7] != "Updated" {
+			t.Errorf("expected name to start with 'Updated', got %q", u.Name)
+		}
+	}
+}
+
+func TestExecUpdateBatchTx(t *testing.T) {
+	truncateUsers(t)
+	ctx := context.Background()
+
+	// Insert test users
+	for i := 0; i < 2; i++ {
+		age := 20 + i
+		insertTestUser(t, fmt.Sprintf("user%d@test.com", i), fmt.Sprintf("User%d", i), &age)
+	}
+
+	factory, err := New[User](testDB, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	users, err := factory.ExecQuery(ctx, queryAll, nil)
+	if err != nil {
+		t.Fatalf("ExecQuery() failed: %v", err)
+	}
+
+	tx, err := testDB.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("BeginTxx() failed: %v", err)
+	}
+
+	batchParams := make([]map[string]any, len(users))
+	for i, u := range users {
+		batchParams[i] = map[string]any{
+			"id":       u.ID,
+			"new_name": fmt.Sprintf("TxUpdated%d", i),
+		}
+	}
+
+	count, err := factory.ExecUpdateBatchTx(ctx, tx, updateName, batchParams)
+	if err != nil {
+		tx.Rollback()
+		t.Fatalf("ExecUpdateBatchTx() failed: %v", err)
+	}
+
+	if count != 2 {
+		tx.Rollback()
+		t.Errorf("expected 2 updated, got %d", count)
+	}
+
+	// Rollback and verify original names
+	tx.Rollback()
+
+	afterRollback, err := factory.ExecQuery(ctx, queryAll, nil)
+	if err != nil {
+		t.Fatalf("ExecQuery() failed: %v", err)
+	}
+
+	for _, u := range afterRollback {
+		if u.Name[:4] != "User" {
+			t.Errorf("expected name to start with 'User' after rollback, got %q", u.Name)
+		}
+	}
+}
+
+func TestExecDeleteBatch(t *testing.T) {
+	truncateUsers(t)
+	ctx := context.Background()
+
+	// Insert test users
+	ids := make([]int, 3)
+	for i := 0; i < 3; i++ {
+		age := 20 + i
+		ids[i] = insertTestUser(t, fmt.Sprintf("user%d@test.com", i), fmt.Sprintf("User%d", i), &age)
+	}
+
+	factory, err := New[User](testDB, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Delete first two users
+	batchParams := []map[string]any{
+		{"id": ids[0]},
+		{"id": ids[1]},
+	}
+
+	count, err := factory.ExecDeleteBatch(ctx, deleteByID, batchParams)
+	if err != nil {
+		t.Fatalf("ExecDeleteBatch() failed: %v", err)
+	}
+
+	if count != 2 {
+		t.Errorf("expected 2 deleted, got %d", count)
+	}
+
+	// Verify only one user remains
+	remaining, err := factory.ExecQuery(ctx, queryAll, nil)
+	if err != nil {
+		t.Fatalf("ExecQuery() failed: %v", err)
+	}
+
+	if len(remaining) != 1 {
+		t.Errorf("expected 1 remaining user, got %d", len(remaining))
+	}
+}
+
+func TestExecDeleteBatchTx(t *testing.T) {
+	truncateUsers(t)
+	ctx := context.Background()
+
+	// Insert test users
+	ids := make([]int, 2)
+	for i := 0; i < 2; i++ {
+		age := 20 + i
+		ids[i] = insertTestUser(t, fmt.Sprintf("user%d@test.com", i), fmt.Sprintf("User%d", i), &age)
+	}
+
+	factory, err := New[User](testDB, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	tx, err := testDB.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("BeginTxx() failed: %v", err)
+	}
+
+	batchParams := []map[string]any{
+		{"id": ids[0]},
+		{"id": ids[1]},
+	}
+
+	count, err := factory.ExecDeleteBatchTx(ctx, tx, deleteByID, batchParams)
+	if err != nil {
+		tx.Rollback()
+		t.Fatalf("ExecDeleteBatchTx() failed: %v", err)
+	}
+
+	if count != 2 {
+		tx.Rollback()
+		t.Errorf("expected 2 deleted, got %d", count)
+	}
+
+	// Rollback
+	tx.Rollback()
+
+	// Verify users still exist
+	remaining, err := factory.ExecQuery(ctx, queryAll, nil)
+	if err != nil {
+		t.Fatalf("ExecQuery() failed: %v", err)
+	}
+
+	if len(remaining) != 2 {
+		t.Errorf("expected 2 users after rollback, got %d", len(remaining))
+	}
+}
+
+func TestExecCompoundTx(t *testing.T) {
+	truncateUsers(t)
+	ctx := context.Background()
+
+	// Insert test users with different ages
+	for i := 0; i < 5; i++ {
+		age := 20 + i*5 // 20, 25, 30, 35, 40
+		insertTestUser(t, fmt.Sprintf("user%d@test.com", i), fmt.Sprintf("User%d", i), &age)
+	}
+
+	factory, err := New[User](testDB, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	tx, err := testDB.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("BeginTxx() failed: %v", err)
+	}
+	defer tx.Rollback()
+
+	spec := CompoundQuerySpec{
+		Base: QuerySpec{
+			Fields: []string{"id", "name", "email", "age"},
+			Where:  []ConditionSpec{{Field: "age", Operator: "<", Param: "young_max"}},
+		},
+		Operands: []SetOperandSpec{
+			{
+				Operation: "union",
+				Query: QuerySpec{
+					Fields: []string{"id", "name", "email", "age"},
+					Where:  []ConditionSpec{{Field: "age", Operator: ">", Param: "old_min"}},
+				},
+			},
+		},
+		OrderBy: []OrderBySpec{{Field: "age", Direction: "asc"}},
+	}
+
+	users, err := factory.ExecCompoundTx(ctx, tx, spec, map[string]any{"q0_young_max": 22, "q1_old_min": 38})
+	if err != nil {
+		t.Fatalf("ExecCompoundTx() failed: %v", err)
+	}
+
+	// Should get users with age < 22 (1 user: age 20) and age > 38 (1 user: age 40)
+	if len(users) != 2 {
+		t.Errorf("expected 2 users, got %d", len(users))
 	}
 }

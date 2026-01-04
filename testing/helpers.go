@@ -13,11 +13,11 @@ import (
 
 // RenderedQuery represents a captured rendered query for testing.
 type RenderedQuery struct {
-	Capability string
-	Type       string // "query", "select", "update", "delete", "aggregate"
-	SQL        string
-	Params     map[string]any
-	Timestamp  time.Time
+	Statement string
+	Type      string // "query", "select", "update", "delete", "aggregate"
+	SQL       string
+	Params    map[string]any
+	Timestamp time.Time
 }
 
 // QueryCapture captures rendered SQL queries for testing and verification.
@@ -35,15 +35,15 @@ func NewQueryCapture() *QueryCapture {
 }
 
 // CaptureQuery adds a rendered query to the capture.
-func (qc *QueryCapture) CaptureQuery(capability, queryType, sql string, params map[string]any) {
+func (qc *QueryCapture) CaptureQuery(statement, queryType, sql string, params map[string]any) {
 	qc.mu.Lock()
 	defer qc.mu.Unlock()
 	qc.queries = append(qc.queries, RenderedQuery{
-		Capability: capability,
-		Type:       queryType,
-		SQL:        sql,
-		Params:     params,
-		Timestamp:  time.Now(),
+		Statement: statement,
+		Type:      queryType,
+		SQL:       sql,
+		Params:    params,
+		Timestamp: time.Now(),
 	})
 }
 
@@ -94,286 +94,85 @@ func (qc *QueryCapture) ByType(queryType string) []RenderedQuery {
 	return result
 }
 
-// ByCapability returns all captured queries for a specific capability.
-func (qc *QueryCapture) ByCapability(capability string) []RenderedQuery {
+// ByStatement returns all captured queries for a specific statement.
+func (qc *QueryCapture) ByStatement(statement string) []RenderedQuery {
 	qc.mu.Lock()
 	defer qc.mu.Unlock()
 	result := make([]RenderedQuery, 0)
 	for _, q := range qc.queries {
-		if q.Capability == capability {
+		if q.Statement == statement {
 			result = append(result, q)
 		}
 	}
 	return result
 }
 
-// CapabilityCapture captures capability registration events for testing.
+// ExecutorEventCapture captures executor creation events.
 // Thread-safe for concurrent capture.
-type CapabilityCapture struct {
-	capabilities []CapturedCapability
-	mu           sync.Mutex
-}
-
-// CapturedCapability represents a captured capability event.
-type CapturedCapability struct {
-	Table     string
-	Name      string
-	Type      string
-	Action    string // "added", "removed", "not_found"
-	Timestamp time.Time
-}
-
-// NewCapabilityCapture creates a new CapabilityCapture instance.
-func NewCapabilityCapture() *CapabilityCapture {
-	return &CapabilityCapture{
-		capabilities: make([]CapturedCapability, 0),
-	}
-}
-
-// Handler returns an EventCallback that captures capability events.
-// Use this with capitan.Hook to capture edamame capability events.
-func (cc *CapabilityCapture) Handler() capitan.EventCallback {
-	return func(_ context.Context, e *capitan.Event) {
-		sig := e.Signal()
-		var action string
-		switch sig {
-		case edamame.CapabilityAdded:
-			action = "added"
-		case edamame.CapabilityRemoved:
-			action = "removed"
-		case edamame.CapabilityNotFound:
-			action = "not_found"
-		default:
-			return
-		}
-
-		table, _ := edamame.KeyTable.From(e)
-		name, _ := edamame.KeyCapability.From(e)
-		capType, _ := edamame.KeyType.From(e)
-
-		cc.mu.Lock()
-		defer cc.mu.Unlock()
-		cc.capabilities = append(cc.capabilities, CapturedCapability{
-			Table:     table,
-			Name:      name,
-			Type:      capType,
-			Action:    action,
-			Timestamp: time.Now(),
-		})
-	}
-}
-
-// Capabilities returns a copy of all captured capabilities.
-func (cc *CapabilityCapture) Capabilities() []CapturedCapability {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	result := make([]CapturedCapability, len(cc.capabilities))
-	copy(result, cc.capabilities)
-	return result
-}
-
-// Count returns the number of captured capabilities.
-func (cc *CapabilityCapture) Count() int {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	return len(cc.capabilities)
-}
-
-// Reset clears all captured capabilities.
-func (cc *CapabilityCapture) Reset() {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	cc.capabilities = cc.capabilities[:0]
-}
-
-// ByAction returns all captured capabilities with a specific action.
-func (cc *CapabilityCapture) ByAction(action string) []CapturedCapability {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	result := make([]CapturedCapability, 0)
-	for _, c := range cc.capabilities {
-		if c.Action == action {
-			result = append(result, c)
-		}
-	}
-	return result
-}
-
-// ByTable returns all captured capabilities for a specific table.
-func (cc *CapabilityCapture) ByTable(table string) []CapturedCapability {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	result := make([]CapturedCapability, 0)
-	for _, c := range cc.capabilities {
-		if c.Table == table {
-			result = append(result, c)
-		}
-	}
-	return result
-}
-
-// WaitForCount blocks until the capture has at least n capabilities or timeout occurs.
-// Returns true if count reached, false if timeout.
-func (cc *CapabilityCapture) WaitForCount(n int, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if cc.Count() >= n {
-			return true
-		}
-		time.Sleep(time.Millisecond)
-	}
-	return false
-}
-
-// SpecValidator provides utilities for validating factory specs.
-type SpecValidator struct{}
-
-// NewSpecValidator creates a new SpecValidator instance.
-func NewSpecValidator() *SpecValidator {
-	return &SpecValidator{}
-}
-
-// HasQuery checks if a spec contains a query capability with the given name.
-func (*SpecValidator) HasQuery(spec edamame.FactorySpec, name string) bool {
-	for i := range spec.Queries {
-		if spec.Queries[i].Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// HasSelect checks if a spec contains a select capability with the given name.
-func (*SpecValidator) HasSelect(spec edamame.FactorySpec, name string) bool {
-	for i := range spec.Selects {
-		if spec.Selects[i].Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// HasUpdate checks if a spec contains an update capability with the given name.
-func (*SpecValidator) HasUpdate(spec edamame.FactorySpec, name string) bool {
-	for _, u := range spec.Updates {
-		if u.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// HasDelete checks if a spec contains a delete capability with the given name.
-func (*SpecValidator) HasDelete(spec edamame.FactorySpec, name string) bool {
-	for _, d := range spec.Deletes {
-		if d.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// HasAggregate checks if a spec contains an aggregate capability with the given name.
-func (*SpecValidator) HasAggregate(spec edamame.FactorySpec, name string) bool {
-	for _, a := range spec.Aggregates {
-		if a.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// QueryByName returns a query capability by name, or nil if not found.
-func (*SpecValidator) QueryByName(spec edamame.FactorySpec, name string) *edamame.QueryCapabilitySpec {
-	for i := range spec.Queries {
-		if spec.Queries[i].Name == name {
-			return &spec.Queries[i]
-		}
-	}
-	return nil
-}
-
-// SelectByName returns a select capability by name, or nil if not found.
-func (*SpecValidator) SelectByName(spec edamame.FactorySpec, name string) *edamame.SelectCapabilitySpec {
-	for i := range spec.Selects {
-		if spec.Selects[i].Name == name {
-			return &spec.Selects[i]
-		}
-	}
-	return nil
-}
-
-// CountCapabilities returns the total number of capabilities in a spec.
-func (*SpecValidator) CountCapabilities(spec edamame.FactorySpec) int {
-	return len(spec.Queries) + len(spec.Selects) + len(spec.Updates) + len(spec.Deletes) + len(spec.Aggregates)
-}
-
-// FactoryEventCapture captures factory creation events.
-// Thread-safe for concurrent capture.
-type FactoryEventCapture struct {
-	tables []FactoryCreatedEvent
+type ExecutorEventCapture struct {
+	tables []ExecutorCreatedEvent
 	mu     sync.Mutex
 }
 
-// FactoryCreatedEvent represents a captured factory creation event.
-type FactoryCreatedEvent struct {
+// ExecutorCreatedEvent represents a captured executor creation event.
+type ExecutorCreatedEvent struct {
 	Table     string
 	Timestamp time.Time
 }
 
-// NewFactoryEventCapture creates a new FactoryEventCapture instance.
-func NewFactoryEventCapture() *FactoryEventCapture {
-	return &FactoryEventCapture{
-		tables: make([]FactoryCreatedEvent, 0),
+// NewExecutorEventCapture creates a new ExecutorEventCapture instance.
+func NewExecutorEventCapture() *ExecutorEventCapture {
+	return &ExecutorEventCapture{
+		tables: make([]ExecutorCreatedEvent, 0),
 	}
 }
 
-// Handler returns an EventCallback that captures factory creation events.
-func (fc *FactoryEventCapture) Handler() capitan.EventCallback {
+// Handler returns an EventCallback that captures executor creation events.
+func (ec *ExecutorEventCapture) Handler() capitan.EventCallback {
 	return func(_ context.Context, e *capitan.Event) {
-		if e.Signal() != edamame.FactoryCreated {
+		if e.Signal() != edamame.ExecutorCreated {
 			return
 		}
 
 		table, _ := edamame.KeyTable.From(e)
 
-		fc.mu.Lock()
-		defer fc.mu.Unlock()
-		fc.tables = append(fc.tables, FactoryCreatedEvent{
+		ec.mu.Lock()
+		defer ec.mu.Unlock()
+		ec.tables = append(ec.tables, ExecutorCreatedEvent{
 			Table:     table,
 			Timestamp: time.Now(),
 		})
 	}
 }
 
-// Tables returns a copy of all captured factory tables.
-func (fc *FactoryEventCapture) Tables() []FactoryCreatedEvent {
-	fc.mu.Lock()
-	defer fc.mu.Unlock()
-	result := make([]FactoryCreatedEvent, len(fc.tables))
-	copy(result, fc.tables)
+// Tables returns a copy of all captured executor tables.
+func (ec *ExecutorEventCapture) Tables() []ExecutorCreatedEvent {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
+	result := make([]ExecutorCreatedEvent, len(ec.tables))
+	copy(result, ec.tables)
 	return result
 }
 
-// Count returns the number of captured factory events.
-func (fc *FactoryEventCapture) Count() int {
-	fc.mu.Lock()
-	defer fc.mu.Unlock()
-	return len(fc.tables)
+// Count returns the number of captured executor events.
+func (ec *ExecutorEventCapture) Count() int {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
+	return len(ec.tables)
 }
 
-// Reset clears all captured factory events.
-func (fc *FactoryEventCapture) Reset() {
-	fc.mu.Lock()
-	defer fc.mu.Unlock()
-	fc.tables = fc.tables[:0]
+// Reset clears all captured executor events.
+func (ec *ExecutorEventCapture) Reset() {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
+	ec.tables = ec.tables[:0]
 }
 
 // WaitForCount blocks until the capture has at least n events or timeout occurs.
-func (fc *FactoryEventCapture) WaitForCount(n int, timeout time.Duration) bool {
+func (ec *ExecutorEventCapture) WaitForCount(n int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if fc.Count() >= n {
+		if ec.Count() >= n {
 			return true
 		}
 		time.Sleep(time.Millisecond)

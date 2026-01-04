@@ -1260,6 +1260,80 @@ func TestAggregateConditionVariants(t *testing.T) {
 	}
 }
 
+func TestSelectExpressionsForSelect(t *testing.T) {
+	factory, err := New[User](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		expr     SelectExprSpec
+		contains string
+	}{
+		{
+			name:     "upper",
+			expr:     SelectExprSpec{Func: "upper", Field: "name", Alias: "upper_name"},
+			contains: "UPPER",
+		},
+		{
+			name:     "count_star",
+			expr:     SelectExprSpec{Func: "count_star", Alias: "total"},
+			contains: "COUNT(*)",
+		},
+		{
+			name:     "now",
+			expr:     SelectExprSpec{Func: "now", Alias: "current_ts"},
+			contains: "NOW",
+		},
+		{
+			name:     "cast",
+			expr:     SelectExprSpec{Func: "cast", Field: "age", CastType: "text", Alias: "age_text"},
+			contains: "CAST",
+		},
+		{
+			name:     "coalesce",
+			expr:     SelectExprSpec{Func: "coalesce", Params: []string{"name", "default_name"}, Alias: "result"},
+			contains: "COALESCE",
+		},
+		{
+			name:     "concat",
+			expr:     SelectExprSpec{Func: "concat", Fields: []string{"name", "email"}, Alias: "combined"},
+			contains: "CONCAT",
+		},
+		{
+			name:     "substring",
+			expr:     SelectExprSpec{Func: "substring", Field: "name", Params: []string{"start", "length"}, Alias: "sub"},
+			contains: "SUBSTRING",
+		},
+		{
+			name:     "power",
+			expr:     SelectExprSpec{Func: "power", Field: "age", Params: []string{"exp"}, Alias: "powered"},
+			contains: "POWER",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := SelectSpec{
+				SelectExprs: []SelectExprSpec{tt.expr},
+				Where:       []ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+			}
+			builder, err := factory.selectFromSpec(spec)
+			if err != nil {
+				t.Fatalf("selectFromSpec() failed: %v", err)
+			}
+			result, err := builder.Render()
+			if err != nil {
+				t.Fatalf("Render() failed: %v", err)
+			}
+			if !strings.Contains(strings.ToUpper(result.SQL), tt.contains) {
+				t.Errorf("SQL should contain %q: %s", tt.contains, result.SQL)
+			}
+		})
+	}
+}
+
 func TestConditionSpecHelpers(t *testing.T) {
 	tests := []struct {
 		name           string

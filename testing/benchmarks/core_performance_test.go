@@ -15,6 +15,71 @@ type User struct {
 	Age   *int   `db:"age" type:"integer"`
 }
 
+// Define benchmark statements
+var (
+	benchQueryAll = edamame.NewQueryStatement("bench-query-all", "Query all users", edamame.QuerySpec{})
+
+	benchSelectByID = edamame.NewSelectStatement("bench-select-by-id", "Select user by ID", edamame.SelectSpec{
+		Where: []edamame.ConditionSpec{{Field: "id", Operator: "=", Param: "id"}},
+	})
+
+	benchQueryByAge = edamame.NewQueryStatement("bench-query-by-age", "Query users by age", edamame.QuerySpec{
+		Where: []edamame.ConditionSpec{
+			{Field: "age", Operator: ">=", Param: "min_age"},
+		},
+	})
+
+	benchComplexQuery = edamame.NewQueryStatement("bench-complex", "Complex query", edamame.QuerySpec{
+		Fields: []string{"id", "name", "email"},
+		Where: []edamame.ConditionSpec{
+			{Field: "age", Operator: ">=", Param: "min_age"},
+			{Field: "age", Operator: "<=", Param: "max_age"},
+			{
+				Logic: "OR",
+				Group: []edamame.ConditionSpec{
+					{Field: "name", Operator: "LIKE", Param: "name_pattern"},
+					{Field: "email", Operator: "LIKE", Param: "email_pattern"},
+				},
+			},
+		},
+		OrderBy: []edamame.OrderBySpec{
+			{Field: "name", Direction: "asc"},
+			{Field: "age", Direction: "desc"},
+		},
+		Limit:  intPtr(100),
+		Offset: intPtr(0),
+	})
+
+	benchGroupedQuery = edamame.NewQueryStatement("bench-grouped", "Grouped conditions", edamame.QuerySpec{
+		Where: []edamame.ConditionSpec{
+			{Field: "age", Operator: ">=", Param: "min_age"},
+			{
+				Logic: "OR",
+				Group: []edamame.ConditionSpec{
+					{Field: "name", Operator: "=", Param: "name1"},
+					{Field: "name", Operator: "=", Param: "name2"},
+					{Field: "name", Operator: "=", Param: "name3"},
+				},
+			},
+			{
+				Logic: "AND",
+				Group: []edamame.ConditionSpec{
+					{Field: "email", Operator: "LIKE", Param: "email1"},
+					{Field: "email", Operator: "LIKE", Param: "email2"},
+				},
+			},
+		},
+	})
+
+	benchCountAll = edamame.NewAggregateStatement("bench-count", "Count all", edamame.AggCount, edamame.AggregateSpec{})
+
+	benchSumAge = edamame.NewAggregateStatement("bench-sum-age", "Sum age", edamame.AggSum, edamame.AggregateSpec{Field: "age"})
+
+	benchAvgAge = edamame.NewAggregateStatement("bench-avg-age", "Avg age", edamame.AggAvg, edamame.AggregateSpec{Field: "age"})
+)
+
+func intPtr(i int) *int { return &i }
+
 // BenchmarkFactoryCreation measures factory initialization cost.
 func BenchmarkFactoryCreation(b *testing.B) {
 	b.ReportAllocs()
@@ -27,7 +92,7 @@ func BenchmarkFactoryCreation(b *testing.B) {
 	}
 }
 
-// BenchmarkQueryBuilding measures query builder creation from capability.
+// BenchmarkQueryBuilding measures query builder creation from statement.
 func BenchmarkQueryBuilding(b *testing.B) {
 	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
@@ -38,7 +103,7 @@ func BenchmarkQueryBuilding(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		q, err := factory.Query("query")
+		q, err := factory.Query(benchQueryAll)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -46,7 +111,26 @@ func BenchmarkQueryBuilding(b *testing.B) {
 	}
 }
 
-// BenchmarkSelectBuilding measures select builder creation from capability.
+// BenchmarkQueryWithConditions measures query builder creation with WHERE conditions.
+func BenchmarkQueryWithConditions(b *testing.B) {
+	factory, err := edamame.New[User](nil, "users", postgres.New())
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		q, err := factory.Query(benchQueryByAge)
+		if err != nil {
+			b.Fatal(err)
+		}
+		_ = q
+	}
+}
+
+// BenchmarkSelectBuilding measures select builder creation from statement.
 func BenchmarkSelectBuilding(b *testing.B) {
 	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
@@ -57,7 +141,7 @@ func BenchmarkSelectBuilding(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		s, err := factory.Select("select")
+		s, err := factory.Select(benchSelectByID)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -65,7 +149,7 @@ func BenchmarkSelectBuilding(b *testing.B) {
 	}
 }
 
-// BenchmarkQueryRender measures SQL rendering from query capability.
+// BenchmarkQueryRender measures SQL rendering from query statement.
 func BenchmarkQueryRender(b *testing.B) {
 	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
@@ -76,7 +160,7 @@ func BenchmarkQueryRender(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		sql, err := factory.RenderQuery("query")
+		sql, err := factory.RenderQuery(benchQueryAll)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -84,7 +168,7 @@ func BenchmarkQueryRender(b *testing.B) {
 	}
 }
 
-// BenchmarkSelectRender measures SQL rendering from select capability.
+// BenchmarkSelectRender measures SQL rendering from select statement.
 func BenchmarkSelectRender(b *testing.B) {
 	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
@@ -95,7 +179,7 @@ func BenchmarkSelectRender(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		sql, err := factory.RenderSelect("select")
+		sql, err := factory.RenderSelect(benchSelectByID)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -103,20 +187,11 @@ func BenchmarkSelectRender(b *testing.B) {
 	}
 }
 
-// BenchmarkAddQuery measures custom query capability registration.
-func BenchmarkAddQuery(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users", postgres.New())
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	c := edamame.QueryCapability{
-		Name:        "custom",
-		Description: "Custom query",
-		Spec: edamame.QuerySpec{
-			Where: []edamame.ConditionSpec{
-				{Field: "age", Operator: ">=", Param: "min_age"},
-			},
+// BenchmarkStatementCreation measures statement creation overhead.
+func BenchmarkStatementCreation(b *testing.B) {
+	spec := edamame.QuerySpec{
+		Where: []edamame.ConditionSpec{
+			{Field: "age", Operator: ">=", Param: "min_age"},
 		},
 	}
 
@@ -124,116 +199,7 @@ func BenchmarkAddQuery(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		factory.AddQuery(c)
-	}
-}
-
-// BenchmarkCapabilityLookup measures capability lookup performance.
-func BenchmarkCapabilityLookup(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users", postgres.New())
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	// Add several custom queries
-	for i := 0; i < 10; i++ {
-		factory.AddQuery(edamame.QueryCapability{
-			Name:        "query-" + string(rune('a'+i)),
-			Description: "Custom query",
-		})
-	}
-
-	b.Run("HasQuery", func(b *testing.B) {
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			_ = factory.HasQuery("query-e")
-		}
-	})
-
-	b.Run("GetQuery", func(b *testing.B) {
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			_, _ = factory.GetQuery("query-e")
-		}
-	})
-
-	b.Run("Query", func(b *testing.B) {
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			_, _ = factory.Query("query-e")
-		}
-	})
-}
-
-// BenchmarkListCapabilities measures capability list performance.
-func BenchmarkListCapabilities(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users", postgres.New())
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	// Add several custom capabilities
-	for i := 0; i < 20; i++ {
-		factory.AddQuery(edamame.QueryCapability{
-			Name: "query-" + string(rune('a'+i)),
-		})
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		_ = factory.ListQueries()
-	}
-}
-
-// BenchmarkSpec measures spec generation performance.
-func BenchmarkSpec(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users", postgres.New())
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	// Add custom capabilities
-	for i := 0; i < 5; i++ {
-		factory.AddQuery(edamame.QueryCapability{Name: "q" + string(rune('a'+i))})
-		factory.AddSelect(edamame.SelectCapability{Name: "s" + string(rune('a'+i))})
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		_ = factory.Spec()
-	}
-}
-
-// BenchmarkSpecJSON measures JSON spec generation performance.
-func BenchmarkSpecJSON(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users", postgres.New())
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	// Add custom capabilities
-	for i := 0; i < 5; i++ {
-		factory.AddQuery(edamame.QueryCapability{Name: "q" + string(rune('a'+i))})
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		_, err := factory.SpecJSON()
-		if err != nil {
-			b.Fatal(err)
-		}
+		_ = edamame.NewQueryStatement("custom", "Custom query", spec)
 	}
 }
 
@@ -244,38 +210,11 @@ func BenchmarkComplexQuery(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	limit := 100
-	offset := 0
-
-	factory.AddQuery(edamame.QueryCapability{
-		Name: "complex",
-		Spec: edamame.QuerySpec{
-			Fields: []string{"id", "name", "email"},
-			Where: []edamame.ConditionSpec{
-				{Field: "age", Operator: ">=", Param: "min_age"},
-				{Field: "age", Operator: "<=", Param: "max_age"},
-				{
-					Logic: "OR",
-					Group: []edamame.ConditionSpec{
-						{Field: "name", Operator: "LIKE", Param: "name_pattern"},
-						{Field: "email", Operator: "LIKE", Param: "email_pattern"},
-					},
-				},
-			},
-			OrderBy: []edamame.OrderBySpec{
-				{Field: "name", Direction: "asc"},
-				{Field: "age", Direction: "desc"},
-			},
-			Limit:  &limit,
-			Offset: &offset,
-		},
-	})
-
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		q, err := factory.Query("complex")
+		q, err := factory.Query(benchComplexQuery)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -293,35 +232,11 @@ func BenchmarkConditionGroups(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	factory.AddQuery(edamame.QueryCapability{
-		Name: "grouped",
-		Spec: edamame.QuerySpec{
-			Where: []edamame.ConditionSpec{
-				{Field: "age", Operator: ">=", Param: "min_age"},
-				{
-					Logic: "OR",
-					Group: []edamame.ConditionSpec{
-						{Field: "name", Operator: "=", Param: "name1"},
-						{Field: "name", Operator: "=", Param: "name2"},
-						{Field: "name", Operator: "=", Param: "name3"},
-					},
-				},
-				{
-					Logic: "AND",
-					Group: []edamame.ConditionSpec{
-						{Field: "email", Operator: "LIKE", Param: "email1"},
-						{Field: "email", Operator: "LIKE", Param: "email2"},
-					},
-				},
-			},
-		},
-	})
-
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		q, err := factory.Query("grouped")
+		q, err := factory.Query(benchGroupedQuery)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -332,8 +247,8 @@ func BenchmarkConditionGroups(b *testing.B) {
 	}
 }
 
-// BenchmarkConcurrentAccess measures concurrent capability access.
-func BenchmarkConcurrentAccess(b *testing.B) {
+// BenchmarkConcurrentQueryBuilding measures concurrent query building.
+func BenchmarkConcurrentQueryBuilding(b *testing.B) {
 	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
@@ -344,62 +259,25 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _ = factory.Query("query")
-			_ = factory.HasQuery("query")
-			_, _ = factory.GetQuery("query")
+			_, _ = factory.Query(benchQueryAll)
+			_, _ = factory.Select(benchSelectByID)
 		}
 	})
 }
 
-// BenchmarkConcurrentAddRemove measures concurrent add/remove operations.
-func BenchmarkConcurrentAddRemove(b *testing.B) {
+// BenchmarkAggregateStatements measures aggregate statement performance.
+func BenchmarkAggregateStatements(b *testing.B) {
 	factory, err := edamame.New[User](nil, "users", postgres.New())
 	if err != nil {
 		b.Fatal(err)
 	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	b.RunParallel(func(pb *testing.PB) {
-		i := 0
-		for pb.Next() {
-			name := "temp-" + string(rune('a'+i%26))
-			factory.AddQuery(edamame.QueryCapability{Name: name})
-			factory.RemoveQuery(name)
-			i++
-		}
-	})
-}
-
-// BenchmarkAggregateCapabilities measures aggregate capability performance.
-func BenchmarkAggregateCapabilities(b *testing.B) {
-	factory, err := edamame.New[User](nil, "users", postgres.New())
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	// Add various aggregate capabilities
-	factory.AddAggregate(edamame.AggregateCapability{
-		Name: "sum-age",
-		Spec: edamame.AggregateSpec{Field: "age"},
-		Func: edamame.AggSum,
-	})
-	factory.AddAggregate(edamame.AggregateCapability{
-		Name: "avg-age",
-		Spec: edamame.AggregateSpec{Field: "age"},
-		Func: edamame.AggAvg,
-	})
 
 	b.Run("count", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			a, err := factory.Aggregate("count")
-			if err != nil {
-				b.Fatal(err)
-			}
+			a := factory.Aggregate(benchCountAll)
 			_, _ = a.Render()
 		}
 	})
@@ -409,10 +287,7 @@ func BenchmarkAggregateCapabilities(b *testing.B) {
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			a, err := factory.Aggregate("sum-age")
-			if err != nil {
-				b.Fatal(err)
-			}
+			a := factory.Aggregate(benchSumAge)
 			_, _ = a.Render()
 		}
 	})
@@ -422,10 +297,7 @@ func BenchmarkAggregateCapabilities(b *testing.B) {
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			a, err := factory.Aggregate("avg-age")
-			if err != nil {
-				b.Fatal(err)
-			}
+			a := factory.Aggregate(benchAvgAge)
 			_, _ = a.Render()
 		}
 	})

@@ -25,8 +25,8 @@ func TestQueryCapture(t *testing.T) {
 		t.Fatalf("expected 2 queries, got %d", len(queries))
 	}
 
-	if queries[0].Capability != "users-by-age" {
-		t.Errorf("expected capability 'users-by-age', got %q", queries[0].Capability)
+	if queries[0].Statement != "users-by-age" {
+		t.Errorf("expected statement 'users-by-age', got %q", queries[0].Statement)
 	}
 	if queries[0].Type != "query" {
 		t.Errorf("expected type 'query', got %q", queries[0].Type)
@@ -63,8 +63,8 @@ func TestQueryCaptureLast(t *testing.T) {
 	if last == nil {
 		t.Fatal("expected non-nil last query")
 	}
-	if last.Capability != "second" {
-		t.Errorf("expected 'second', got %q", last.Capability)
+	if last.Statement != "second" {
+		t.Errorf("expected 'second', got %q", last.Statement)
 	}
 }
 
@@ -87,14 +87,14 @@ func TestQueryCaptureByType(t *testing.T) {
 	}
 }
 
-func TestQueryCaptureByCapability(t *testing.T) {
+func TestQueryCaptureByStatement(t *testing.T) {
 	capture := NewQueryCapture()
 
 	capture.CaptureQuery("users-query", "query", "SELECT 1", nil)
 	capture.CaptureQuery("users-query", "select", "SELECT 2", nil)
 	capture.CaptureQuery("posts-query", "query", "SELECT 3", nil)
 
-	usersQueries := capture.ByCapability("users-query")
+	usersQueries := capture.ByStatement("users-query")
 	if len(usersQueries) != 2 {
 		t.Errorf("expected 2 users-query, got %d", len(usersQueries))
 	}
@@ -121,217 +121,17 @@ func TestQueryCaptureConcurrent(t *testing.T) {
 	}
 }
 
-func TestCapabilityCapture(t *testing.T) {
+func TestExecutorEventCapture(t *testing.T) {
 	c := capitan.New(capitan.WithSyncMode())
 	defer c.Shutdown()
 
-	capture := NewCapabilityCapture()
-
-	c.Hook(edamame.CapabilityAdded, capture.Handler())
-	c.Hook(edamame.CapabilityRemoved, capture.Handler())
-	c.Hook(edamame.CapabilityNotFound, capture.Handler())
+	capture := NewExecutorEventCapture()
+	c.Hook(edamame.ExecutorCreated, capture.Handler())
 
 	ctx := context.Background()
 
-	// Emit added event
-	c.Emit(ctx, edamame.CapabilityAdded,
-		edamame.KeyTable.Field("users"),
-		edamame.KeyCapability.Field("find-by-email"),
-		edamame.KeyType.Field("query"))
-
-	// Emit removed event
-	c.Emit(ctx, edamame.CapabilityRemoved,
-		edamame.KeyTable.Field("users"),
-		edamame.KeyCapability.Field("old-query"),
-		edamame.KeyType.Field("query"))
-
-	if capture.Count() != 2 {
-		t.Errorf("expected 2 capabilities, got %d", capture.Count())
-	}
-
-	added := capture.ByAction("added")
-	if len(added) != 1 {
-		t.Errorf("expected 1 added, got %d", len(added))
-	}
-
-	if added[0].Table != "users" {
-		t.Errorf("expected table 'users', got %q", added[0].Table)
-	}
-	if added[0].Name != "find-by-email" {
-		t.Errorf("expected capability 'find-by-email', got %q", added[0].Name)
-	}
-}
-
-func TestCapabilityCaptureByTable(t *testing.T) {
-	c := capitan.New(capitan.WithSyncMode())
-	defer c.Shutdown()
-
-	capture := NewCapabilityCapture()
-	c.Hook(edamame.CapabilityAdded, capture.Handler())
-
-	ctx := context.Background()
-
-	c.Emit(ctx, edamame.CapabilityAdded,
-		edamame.KeyTable.Field("users"),
-		edamame.KeyCapability.Field("q1"),
-		edamame.KeyType.Field("query"))
-
-	c.Emit(ctx, edamame.CapabilityAdded,
-		edamame.KeyTable.Field("posts"),
-		edamame.KeyCapability.Field("q2"),
-		edamame.KeyType.Field("query"))
-
-	c.Emit(ctx, edamame.CapabilityAdded,
-		edamame.KeyTable.Field("users"),
-		edamame.KeyCapability.Field("q3"),
-		edamame.KeyType.Field("select"))
-
-	users := capture.ByTable("users")
-	if len(users) != 2 {
-		t.Errorf("expected 2 users capabilities, got %d", len(users))
-	}
-}
-
-func TestCapabilityCaptureWaitForCount(t *testing.T) {
-	c := capitan.New()
-	defer c.Shutdown()
-
-	capture := NewCapabilityCapture()
-	c.Hook(edamame.CapabilityAdded, capture.Handler())
-
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		c.Emit(context.Background(), edamame.CapabilityAdded,
-			edamame.KeyTable.Field("users"),
-			edamame.KeyCapability.Field("test"),
-			edamame.KeyType.Field("query"))
-	}()
-
-	if !capture.WaitForCount(1, 500*time.Millisecond) {
-		t.Error("WaitForCount timed out")
-	}
-
-	// Test timeout
-	if capture.WaitForCount(100, 10*time.Millisecond) {
-		t.Error("WaitForCount should have timed out")
-	}
-}
-
-func TestCapabilityCaptureReset(t *testing.T) {
-	capture := NewCapabilityCapture()
-
-	c := capitan.New(capitan.WithSyncMode())
-	defer c.Shutdown()
-
-	c.Hook(edamame.CapabilityAdded, capture.Handler())
-
-	c.Emit(context.Background(), edamame.CapabilityAdded,
-		edamame.KeyTable.Field("users"),
-		edamame.KeyCapability.Field("test"),
-		edamame.KeyType.Field("query"))
-
-	if capture.Count() != 1 {
-		t.Errorf("expected 1, got %d", capture.Count())
-	}
-
-	capture.Reset()
-
-	if capture.Count() != 0 {
-		t.Errorf("expected 0 after reset, got %d", capture.Count())
-	}
-}
-
-func TestSpecValidator(t *testing.T) {
-	validator := NewSpecValidator()
-
-	spec := edamame.FactorySpec{
-		Table: "users",
-		Queries: []edamame.QueryCapabilitySpec{
-			{Name: "query", Description: "Query all"},
-		},
-		Selects: []edamame.SelectCapabilitySpec{
-			{Name: "select", Description: "Select one"},
-		},
-		Updates: []edamame.UpdateCapabilitySpec{
-			{Name: "update-name", Description: "Update name"},
-		},
-		Deletes: []edamame.DeleteCapabilitySpec{
-			{Name: "delete", Description: "Delete one"},
-		},
-		Aggregates: []edamame.AggregateCapabilitySpec{
-			{Name: "count", Description: "Count all"},
-		},
-	}
-
-	if !validator.HasQuery(spec, "query") {
-		t.Error("expected HasQuery to return true")
-	}
-	if validator.HasQuery(spec, "nonexistent") {
-		t.Error("expected HasQuery to return false for nonexistent")
-	}
-
-	if !validator.HasSelect(spec, "select") {
-		t.Error("expected HasSelect to return true")
-	}
-
-	if !validator.HasUpdate(spec, "update-name") {
-		t.Error("expected HasUpdate to return true")
-	}
-
-	if !validator.HasDelete(spec, "delete") {
-		t.Error("expected HasDelete to return true")
-	}
-
-	if !validator.HasAggregate(spec, "count") {
-		t.Error("expected HasAggregate to return true")
-	}
-
-	if validator.CountCapabilities(spec) != 5 {
-		t.Errorf("expected 5 capabilities, got %d", validator.CountCapabilities(spec))
-	}
-}
-
-func TestSpecValidatorByName(t *testing.T) {
-	validator := NewSpecValidator()
-
-	spec := edamame.FactorySpec{
-		Queries: []edamame.QueryCapabilitySpec{
-			{Name: "find-active", Description: "Find active users"},
-		},
-		Selects: []edamame.SelectCapabilitySpec{
-			{Name: "get-by-id", Description: "Get user by ID"},
-		},
-	}
-
-	query := validator.QueryByName(spec, "find-active")
-	if query == nil {
-		t.Fatal("expected non-nil query")
-	}
-	if query.Description != "Find active users" {
-		t.Errorf("expected 'Find active users', got %q", query.Description)
-	}
-
-	if validator.QueryByName(spec, "nonexistent") != nil {
-		t.Error("expected nil for nonexistent query")
-	}
-
-	sel := validator.SelectByName(spec, "get-by-id")
-	if sel == nil {
-		t.Fatal("expected non-nil select")
-	}
-}
-
-func TestFactoryEventCapture(t *testing.T) {
-	c := capitan.New(capitan.WithSyncMode())
-	defer c.Shutdown()
-
-	capture := NewFactoryEventCapture()
-	c.Hook(edamame.FactoryCreated, capture.Handler())
-
-	ctx := context.Background()
-
-	c.Emit(ctx, edamame.FactoryCreated, edamame.KeyTable.Field("users"))
-	c.Emit(ctx, edamame.FactoryCreated, edamame.KeyTable.Field("posts"))
+	c.Emit(ctx, edamame.ExecutorCreated, edamame.KeyTable.Field("users"))
+	c.Emit(ctx, edamame.ExecutorCreated, edamame.KeyTable.Field("posts"))
 
 	if capture.Count() != 2 {
 		t.Errorf("expected 2 events, got %d", capture.Count())
@@ -347,15 +147,15 @@ func TestFactoryEventCapture(t *testing.T) {
 	}
 }
 
-func TestFactoryEventCaptureReset(t *testing.T) {
-	capture := NewFactoryEventCapture()
+func TestExecutorEventCaptureReset(t *testing.T) {
+	capture := NewExecutorEventCapture()
 
 	c := capitan.New(capitan.WithSyncMode())
 	defer c.Shutdown()
 
-	c.Hook(edamame.FactoryCreated, capture.Handler())
+	c.Hook(edamame.ExecutorCreated, capture.Handler())
 
-	c.Emit(context.Background(), edamame.FactoryCreated, edamame.KeyTable.Field("users"))
+	c.Emit(context.Background(), edamame.ExecutorCreated, edamame.KeyTable.Field("users"))
 
 	if capture.Count() != 1 {
 		t.Errorf("expected 1, got %d", capture.Count())
@@ -368,16 +168,16 @@ func TestFactoryEventCaptureReset(t *testing.T) {
 	}
 }
 
-func TestFactoryEventCaptureWaitForCount(t *testing.T) {
+func TestExecutorEventCaptureWaitForCount(t *testing.T) {
 	c := capitan.New()
 	defer c.Shutdown()
 
-	capture := NewFactoryEventCapture()
-	c.Hook(edamame.FactoryCreated, capture.Handler())
+	capture := NewExecutorEventCapture()
+	c.Hook(edamame.ExecutorCreated, capture.Handler())
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
-		c.Emit(context.Background(), edamame.FactoryCreated, edamame.KeyTable.Field("users"))
+		c.Emit(context.Background(), edamame.ExecutorCreated, edamame.KeyTable.Field("users"))
 	}()
 
 	if !capture.WaitForCount(1, 500*time.Millisecond) {

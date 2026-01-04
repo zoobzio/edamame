@@ -46,8 +46,8 @@ func toConditions(specs []ConditionSpec) []soy.Condition {
 
 // queryFromSpec builds a soy.Query from a QuerySpec.
 // Returns an error if the spec contains invalid values.
-func (f *Factory[T]) queryFromSpec(spec QuerySpec) (*soy.Query[T], error) {
-	q := f.soy.Query()
+func (e *Executor[T]) queryFromSpec(spec QuerySpec) (*soy.Query[T], error) {
+	q := e.soy.Query()
 
 	// Add fields if specified
 	if len(spec.Fields) > 0 {
@@ -290,8 +290,8 @@ func applyForLocking[T any](q *soy.Query[T], forLocking string) (*soy.Query[T], 
 
 // selectFromSpec builds a soy.Select from a SelectSpec.
 // Returns an error if the spec contains invalid values.
-func (f *Factory[T]) selectFromSpec(spec SelectSpec) (*soy.Select[T], error) {
-	s := f.soy.Select()
+func (e *Executor[T]) selectFromSpec(spec SelectSpec) (*soy.Select[T], error) {
+	s := e.soy.Select()
 
 	// Add fields if specified
 	if len(spec.Fields) > 0 {
@@ -533,8 +533,8 @@ func applyForLockingToSelect[T any](s *soy.Select[T], forLocking string) (*soy.S
 }
 
 // modifyFromSpec builds a soy.Update from an UpdateSpec.
-func (f *Factory[T]) modifyFromSpec(spec UpdateSpec) *soy.Update[T] {
-	u := f.soy.Modify()
+func (e *Executor[T]) modifyFromSpec(spec UpdateSpec) *soy.Update[T] {
+	u := e.soy.Modify()
 
 	// Add SET clauses
 	for field, param := range spec.Set {
@@ -582,8 +582,8 @@ func applyConditionToUpdate[T any](u *soy.Update[T], cond ConditionSpec) *soy.Up
 }
 
 // removeFromSpec builds a soy.Delete from a DeleteSpec.
-func (f *Factory[T]) removeFromSpec(spec DeleteSpec) *soy.Delete[T] {
-	d := f.soy.Remove()
+func (e *Executor[T]) removeFromSpec(spec DeleteSpec) *soy.Delete[T] {
+	d := e.soy.Remove()
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -630,8 +630,8 @@ func applyConditionToDelete[T any](d *soy.Delete[T], cond ConditionSpec) *soy.De
 }
 
 // countFromSpec builds a soy.Aggregate (COUNT) from an AggregateSpec.
-func (f *Factory[T]) countFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
-	agg := f.soy.Count()
+func (e *Executor[T]) countFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := e.soy.Count()
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -642,8 +642,8 @@ func (f *Factory[T]) countFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
 }
 
 // sumFromSpec builds a soy.Aggregate (SUM) from an AggregateSpec.
-func (f *Factory[T]) sumFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
-	agg := f.soy.Sum(spec.Field)
+func (e *Executor[T]) sumFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := e.soy.Sum(spec.Field)
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -654,8 +654,8 @@ func (f *Factory[T]) sumFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
 }
 
 // avgFromSpec builds a soy.Aggregate (AVG) from an AggregateSpec.
-func (f *Factory[T]) avgFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
-	agg := f.soy.Avg(spec.Field)
+func (e *Executor[T]) avgFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := e.soy.Avg(spec.Field)
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -666,8 +666,8 @@ func (f *Factory[T]) avgFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
 }
 
 // minFromSpec builds a soy.Aggregate (MIN) from an AggregateSpec.
-func (f *Factory[T]) minFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
-	agg := f.soy.Min(spec.Field)
+func (e *Executor[T]) minFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := e.soy.Min(spec.Field)
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -678,8 +678,8 @@ func (f *Factory[T]) minFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
 }
 
 // maxFromSpec builds a soy.Aggregate (MAX) from an AggregateSpec.
-func (f *Factory[T]) maxFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
-	agg := f.soy.Max(spec.Field)
+func (e *Executor[T]) maxFromSpec(spec AggregateSpec) *soy.Aggregate[T] {
+	agg := e.soy.Max(spec.Field)
 
 	// Add WHERE conditions
 	for i := range spec.Where {
@@ -727,8 +727,8 @@ func applyConditionToAggregate[T any](agg *soy.Aggregate[T], cond ConditionSpec)
 
 // insertFromSpec builds a soy.Create from a CreateSpec.
 // Returns an error if an invalid conflict action is specified.
-func (f *Factory[T]) insertFromSpec(spec CreateSpec) (*soy.Create[T], error) {
-	create := f.soy.Insert()
+func (e *Executor[T]) insertFromSpec(spec CreateSpec) (*soy.Create[T], error) {
+	create := e.soy.Insert()
 
 	// If no conflict handling, return as-is
 	if len(spec.OnConflict) == 0 {
@@ -756,9 +756,9 @@ func (f *Factory[T]) insertFromSpec(spec CreateSpec) (*soy.Create[T], error) {
 }
 
 // compoundFromSpec builds a soy.Compound from a CompoundQuerySpec.
-func (f *Factory[T]) compoundFromSpec(spec CompoundQuerySpec) (*soy.Compound[T], error) {
+func (e *Executor[T]) compoundFromSpec(spec CompoundQuerySpec) (*soy.Compound[T], error) {
 	// Build base query
-	base, err := f.queryFromSpec(spec.Base)
+	base, err := e.queryFromSpec(spec.Base)
 	if err != nil {
 		return nil, fmt.Errorf("base query: %w", err)
 	}
@@ -770,7 +770,7 @@ func (f *Factory[T]) compoundFromSpec(spec CompoundQuerySpec) (*soy.Compound[T],
 
 	// Build first operand to create compound
 	firstOperand := spec.Operands[0]
-	firstQuery, err := f.queryFromSpec(firstOperand.Query)
+	firstQuery, err := e.queryFromSpec(firstOperand.Query)
 	if err != nil {
 		return nil, fmt.Errorf("operand 0: %w", err)
 	}
@@ -796,7 +796,7 @@ func (f *Factory[T]) compoundFromSpec(spec CompoundQuerySpec) (*soy.Compound[T],
 	// Add remaining operands
 	for i := 1; i < len(spec.Operands); i++ {
 		operand := spec.Operands[i]
-		query, err := f.queryFromSpec(operand.Query)
+		query, err := e.queryFromSpec(operand.Query)
 		if err != nil {
 			return nil, fmt.Errorf("operand %d: %w", i, err)
 		}
